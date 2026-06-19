@@ -1749,7 +1749,7 @@ const MarkingInterface = ({ test, token, showToast, onClose }) => {
                       <input type="number" min="0" max={q.marks} value={isAutoMarkable ? (isCorrect ? q.marks : 0) : (marks[q.id]||"")}
                         onChange={e => !isAutoMarkable && setMarks(p => ({ ...p, [q.id]: e.target.value }))}
                         readOnly={isAutoMarkable}
-                        style={{ width:70, textAlign:"center", opacity:isAutoMarkable?.6:1 }}/>
+                        style={{ width:70, textAlign:"center", opacity:isAutoMarkable?0.6:1 }}/>
                       <span style={{ fontSize:13, color:T.whiteDim }}>/ {q.marks}</span>
                     </div>
                   </div>
@@ -1912,6 +1912,30 @@ const StudentGrades = ({ token, userEmail, subject }) => {
     </div>
   );
 };
+const EvaluationsManager = () => (
+  <div className="animate-in">
+    <h1 className="display section-title" style={{ marginBottom: 4 }}>Evaluations</h1>
+    <p className="section-sub" style={{ marginBottom: 28 }}>Lesson evaluations and feedback forms</p>
+    <div className="empty-state">
+      <h3>Coming soon</h3>
+      <p>This section has not been implemented yet.</p>
+    </div>
+  </div>
+);
+const SettingsPage = ({ user }) => (
+  <div className="animate-in">
+    <h1 className="display section-title" style={{ marginBottom: 4 }}>Settings</h1>
+    <p className="section-sub" style={{ marginBottom: 28 }}>Manage your account and platform preferences</p>
+    <div className="glass" style={{ padding: 22 }}>
+      <div style={{ marginBottom: 12 }}>
+        <strong>Name:</strong> {user?.name || "-"}
+      </div>
+      <div>
+        <strong>Email:</strong> {user?.email || "-"}
+      </div>
+    </div>
+  </div>
+);
 const TutorApp = ({ user, onLogout, onPreview }) => {
   const [active, setActive] = useState("dashboard");
   const [markingTest, setMarkingTest] = useState(null);
