@@ -1,0 +1,104 @@
+# ProveIt! — Deployment Instructions
+# =====================================
+# Follow these steps IN ORDER. Takes about 15 minutes total.
+# =====================================
+
+
+## STEP 1 — Run the Database Setup in Supabase (2 min)
+# -------------------------------------------------------
+1. Go to https://supabase.com and log in
+2. Open your ProveIt project
+3. Click "SQL Editor" in the left sidebar
+4. Click "New Query" (top right)
+5. Open the file "supabase-setup.sql" from this folder
+6. Copy ALL the contents and paste into the SQL editor
+7. Click the green "Run" button
+8. You should see "Success. No rows returned" — that means it worked
+
+
+## STEP 2 — Create Your GitHub Repository (3 min)
+# -------------------------------------------------------
+1. Go to https://github.com and log in
+2. Click the "+" button (top right corner) → "New repository"
+3. Repository name: proveit
+4. Set to: Public
+5. Do NOT check any "Initialize" boxes
+6. Click "Create repository"
+7. On the next page, click "uploading an existing file" link
+8. Drag and drop ALL the files from this folder:
+     - package.json
+     - vite.config.js
+     - index.html
+     - vercel.json
+     - .gitignore
+     - supabase-setup.sql
+     - src/  (the whole folder — contains main.jsx and App.jsx)
+     - public/ (the whole folder — contains favicon.svg)
+9. Scroll down, click "Commit changes"
+10. Wait for upload to complete
+
+
+## STEP 3 — Deploy to Vercel (5 min)
+# -------------------------------------------------------
+1. Go to https://vercel.com and log in
+2. Click "Add New..." → "Project"
+3. Click "Continue with GitHub" and connect your account
+4. Find your "proveit" repository and click "Import"
+5. On the configuration screen:
+   - Framework Preset: select "Vite" from the dropdown
+   - Root Directory: leave as "./" (default)
+   - Build Command: npm run build  (should auto-fill)
+   - Output Directory: dist  (should auto-fill)
+6. Click "Deploy"
+7. Wait about 60-90 seconds for build to complete
+8. Vercel will give you a URL like: https://proveit-abc123.vercel.app
+   — That is your live ProveIt! platform!
+
+
+## STEP 4 — First Login (2 min)
+# -------------------------------------------------------
+1. Open your Vercel URL in a browser
+2. Click "I'm a Tutor"
+3. Enter the email and password you created in Supabase Auth
+4. You should be logged into your real tutor dashboard!
+
+If login fails, double-check:
+  - Did the SQL script run successfully? (Step 1)
+  - Is "Confirm email" turned OFF in Supabase → Auth → Settings?
+  - Are you using the exact email/password from Supabase Auth → Users?
+
+
+## STEP 5 — Set Your Tutor Profile (1 min)
+# -------------------------------------------------------
+After logging in successfully, go to Supabase → Table Editor → profiles
+You should see a row with your email and role = "tutor"
+If not, run this in SQL Editor:
+  insert into profiles (email, role, name, subjects)
+  values ('YOUR_EMAIL_HERE', 'tutor', 'Geoff', 
+          '{"Mathematics","Physics","Chemistry"}');
+
+
+## UPDATING THE APP AFTER NEW PHASES
+# -------------------------------------------------------
+When Claude gives you updated code (Phase 3, 4, 5, 6):
+1. Download the new App.jsx file
+2. Go to your GitHub repository
+3. Click on src/App.jsx
+4. Click the pencil (edit) icon
+5. Select all and paste the new code
+6. Click "Commit changes"
+7. Vercel automatically redeploys in ~30 seconds
+8. Refresh your browser — done!
+
+
+## YOUR PROJECT LINKS (fill these in)
+# -------------------------------------------------------
+Vercel URL:     https://_________________________.vercel.app
+Supabase URL:   https://ehpwkfhqlxtjzkkaokfx.supabase.co
+GitHub Repo:    https://github.com/____________/proveit
+
+
+## NEED HELP?
+# -------------------------------------------------------
+If anything goes wrong, take a screenshot and share it
+with Claude — every error has a fix!
