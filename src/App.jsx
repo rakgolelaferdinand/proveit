@@ -602,72 +602,819 @@ const StudentManagement = ({ token, showToast }) => {
     </div>
   );
 };
-const MaterialsManager = ({ token, showToast }) => {
-  const [subject, setSubject] = useState("Mathematics");
-  const { data:folders, loading, reload } = useDB(token,"material_folders",`?subject=eq.${subject}&order=created_at`,[subject]);
-  const [expanded, setExpanded] = useState({});
-  const [showNew, setShowNew] = useState(false);
-  const [name, setName] = useState("");
+
+// ─── PHASE 5: ANALYTICS + EVALUATIONS + MATERIALS UPLOAD ─────────────────────
+
+// ─── ANALYTICS (FULL) ────────────────────────────────────────────────────────
+const Analytics = ({ token }) => {
+  const { data:students }    = useDB(token,"profiles","?role=eq.student");
+  const { data:tests }       = useDB(token,"tests","?status=neq.draft&order=created_at.desc");
+  const { data:submissions } = useDB(token,"submissions","?order=submitted_at.desc");
+  const { data:questions }   = useDB(token,"questions","?order=test_id,order_index");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedTest, setSelectedTest] = useState(null);
+
+  // Compute per-subject stats
+  const subjectStats = ["Mathematics","Physics","Chemistry"].map(s => {
+    const sStudents = (students||[]).filter(st=>(st.subjects||[]).includes(s));
+    const sTests    = (tests||[]).filter(t=>t.subject===s);
+    const sSubs     = (submissions||[]).filter(sub=>{
+      const t=(tests||[]).find(t=>t.id===sub.test_id);
+      return t?.subject===s && sub.score!==null;
+    });
+    const avg = sSubs.length>0 ? Math.round(sSubs.reduce((a,s)=>a+(s.score||0),0)/sSubs.length) : null;
+    const passing = sSubs.filter(s=>(s.score||0)>=50).length;
+    return { subject:s, students:sStudents.length, tests:sTests.length, submissions:sSubs.length, avg, passing };
+  });
+
+  // Per-test stats
+  const testStats = (tests||[]).map(t => {
+    const subs = (submissions||[]).filter(s=>s.test_id===t.id && s.score!==null);
+    const avg  = subs.length>0 ? Math.round(subs.reduce((a,s)=>a+(s.score||0),0)/subs.length) : null;
+    const high = subs.length>0 ? Math.max(...subs.map(s=>s.score||0)) : null;
+    const low  = subs.length>0 ? Math.min(...subs.map(s=>s.score||0)) : null;
+    return { ...t, subCount:subs.length, avg, high, low };
+  });
+
+  // Question analysis for selected test
+  const questionAnalysis = selectedTest ? (() => {
+    const qs   = (questions||[]).filter(q=>q.test_id===selectedTest.id);
+    const subs = (submissions||[]).filter(s=>s.test_id===selectedTest.id);
+    return qs.map(q => {
+      const attempts = subs.filter(s=>s.answers?.[q.id]!==undefined).length;
+      const correct  = (q.type==="mcq"||q.type==="true_false")
+        ? subs.filter(s=>s.answers?.[q.id]===q.correct_answer).length
+        : null;
+      const pct = attempts>0 && correct!==null ? Math.round((correct/attempts)*100) : null;
+      return { ...q, attempts, correct, pct };
+    });
+  })() : [];
+
+  // Top/bottom students
+  const studentPerformance = (students||[]).map(st => {
+    const subs = (submissions||[]).filter(s=>s.student_email===st.email && s.score!==null);
+    const avg  = subs.length>0 ? Math.round(subs.reduce((a,s)=>a+(s.score||0),0)/subs.length) : null;
+    return { ...st, avg, testCount:subs.length };
+  }).filter(s=>s.avg!==null).sort((a,b)=>b.avg-a.avg);
+
+  const totalStudents    = (students||[]).length;
+  const totalSubmissions = (submissions||[]).length;
+  const overallAvg       = (submissions||[]).filter(s=>s.score!==null).length>0
+    ? Math.round((submissions||[]).filter(s=>s.score!==null).reduce((a,s)=>a+(s.score||0),0)/((submissions||[]).filter(s=>s.score!==null).length))
+    : null;
+
+  const ScoreBar = ({ score, max=100, color }) => (
+    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+      <div className="progress-bar" style={{ flex:1, height:8 }}>
+        <div className="progress-fill" style={{ width:`${(score/max)*100}%`, background:`linear-gradient(90deg,${color||T.teal},${color||T.teal}99)` }}/>
+      </div>
+      <span style={{ fontSize:13, fontWeight:600, color:color||(score>=75?T.success:score>=50?T.warning:T.danger), minWidth:36 }}>{score}%</span>
+    </div>
+  );
+
+  return (
+    <div className="animate-in">
+      <h1 className="display section-title" style={{ marginBottom:4 }}>Analytics</h1>
+      <p className="section-sub" style={{ marginBottom:24 }}>Real-time performance insights across your platform</p>
+
+      {/* Top stats */}
+      <div className="grid-4" style={{ marginBottom:24 }}>
+        {[
+          { label:"Total Students",  value:totalStudents,               icon:"students", color:T.teal    },
+          { label:"Tests Completed", value:totalSubmissions,            icon:"tests",    color:T.accent  },
+          { label:"Overall Average", value:overallAvg!==null?`${overallAvg}%`:"—", icon:"grades", color:overallAvg>=75?T.success:overallAvg>=50?T.warning:T.danger },
+          { label:"Active Tests",    value:(tests||[]).filter(t=>t.status==="active").length, icon:"announce", color:T.success },
+        ].map(s=>(
+          <div key={s.label} className="stat-card">
+            <div style={{ color:s.color, marginBottom:14 }}><Icon name={s.icon} size={20}/></div>
+            <div className="display" style={{ fontSize:30, fontWeight:700, color:s.color, marginBottom:2 }}>{s.value}</div>
+            <div style={{ fontSize:13, color:T.whiteDim }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tab navigation */}
+      <div style={{ display:"flex", gap:4, borderBottom:`1px solid ${T.glassBorder}`, marginBottom:24 }}>
+        {[
+          { id:"overview",  label:"Subject Overview" },
+          { id:"tests",     label:"Test Results"     },
+          { id:"students",  label:"Student Rankings" },
+          { id:"questions", label:"Question Analysis"},
+        ].map(tab=>(
+          <button key={tab.id} className="tab-btn" onClick={()=>setActiveTab(tab.id)}
+            style={{ background:activeTab===tab.id?T.tealGlow:"transparent", color:activeTab===tab.id?T.teal:T.whiteDim, borderColor:activeTab===tab.id?T.teal:"transparent", borderBottomColor:"transparent", marginBottom:activeTab===tab.id?"-1px":"0" }}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* OVERVIEW TAB */}
+      {activeTab==="overview" && (
+        <div className="grid-3">
+          {subjectStats.map(s=>{
+            const cfg=SUBJECT_CONFIG[s.subject];
+            return (
+              <div key={s.subject} className="glass" style={{ padding:24, borderTop:`3px solid ${cfg.color}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                  <span className={`tag ${subjectTag(s.subject)}`}>{s.subject}</span>
+                  {s.avg!==null && <span style={{ fontSize:28, fontWeight:700, color:s.avg>=75?T.success:s.avg>=50?T.warning:T.danger }}>{s.avg}%</span>}
+                </div>
+                {s.avg!==null && (
+                  <div className="progress-bar" style={{ marginBottom:16 }}>
+                    <div className="progress-fill" style={{ width:`${s.avg}%`, background:`linear-gradient(90deg,${s.avg>=75?T.success:s.avg>=50?T.warning:T.danger},${s.avg>=75?T.success:s.avg>=50?T.warning:T.danger}88)` }}/>
+                  </div>
+                )}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  {[
+                    { label:"Students",    value:s.students    },
+                    { label:"Tests",       value:s.tests       },
+                    { label:"Submissions", value:s.submissions },
+                    { label:"Passing",     value:s.submissions>0?`${s.passing}/${s.submissions}`:"—" },
+                  ].map(x=>(
+                    <div key={x.label} style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,.03)", borderRadius:8 }}>
+                      <div style={{ fontSize:20, fontWeight:700, color:cfg.color }}>{x.value}</div>
+                      <div style={{ fontSize:11, color:T.whiteDim, marginTop:2 }}>{x.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* TESTS TAB */}
+      {activeTab==="tests" && (
+        <div className="col">
+          {testStats.length===0
+            ? <div className="empty-state"><h3>No test data yet</h3><p>Results will appear here after students submit tests</p></div>
+            : testStats.map(t=>(
+              <div key={t.id} className="glass" style={{ padding:22 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:15, marginBottom:6 }}>{t.title}</div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <span className={`tag ${subjectTag(t.subject)}`}>{t.subject}</span>
+                      <span style={{ fontSize:12, color:T.whiteDim }}>{t.subCount} submission{t.subCount!==1?"s":""}</span>
+                      <span className={`badge ${t.status==="active"?"badge-green":t.status==="closed"?"badge-gray":"badge-teal"}`}>{t.status}</span>
+                    </div>
+                  </div>
+                  {t.avg!==null && (
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:32, fontWeight:700, color:t.avg>=75?T.success:t.avg>=50?T.warning:T.danger, lineHeight:1 }}>{t.avg}%</div>
+                      <div style={{ fontSize:11, color:T.whiteDim, marginTop:2 }}>class avg</div>
+                    </div>
+                  )}
+                </div>
+                {t.avg!==null && (
+                  <>
+                    <ScoreBar score={t.avg}/>
+                    <div style={{ display:"flex", gap:16, marginTop:10 }}>
+                      <span style={{ fontSize:12, color:T.whiteDim }}>Highest: <strong style={{ color:T.success }}>{t.high}%</strong></span>
+                      <span style={{ fontSize:12, color:T.whiteDim }}>Lowest: <strong style={{ color:T.danger }}>{t.low}%</strong></span>
+                    </div>
+                  </>
+                )}
+                {t.subCount===0 && <p style={{ fontSize:13, color:T.whiteDim }}>No submissions yet</p>}
+                <button className="btn-ghost" style={{ padding:"6px 14px", fontSize:12, marginTop:12 }}
+                  onClick={()=>{ setSelectedTest(t); setActiveTab("questions"); }}>
+                  Question Analysis →
+                </button>
+              </div>
+            ))
+          }
+        </div>
+      )}
+
+      {/* STUDENT RANKINGS TAB */}
+      {activeTab==="students" && (
+        <div>
+          {studentPerformance.length===0
+            ? <div className="empty-state"><h3>No data yet</h3><p>Student averages appear here after tests are marked and released</p></div>
+            : (
+              <div className="glass" style={{ overflow:"hidden" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width:48 }}>#</th>
+                      <th>Student</th>
+                      <th>Subjects</th>
+                      <th>Tests Done</th>
+                      <th>Average</th>
+                      <th>Performance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentPerformance.map((s,i)=>(
+                      <tr key={s.email}>
+                        <td style={{ fontWeight:700, color:i===0?T.warning:i===1?T.whiteDim:i===2?"#CD7F32":T.whiteDim }}>
+                          {i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}
+                        </td>
+                        <td>
+                          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                            <Avatar name={s.name} size={32}/>
+                            <div>
+                              <div style={{ fontWeight:500, fontSize:14 }}>{s.name}</div>
+                              <div style={{ fontSize:11, color:T.whiteDim }}>{s.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                            {(s.subjects||[]).map(sub=><span key={sub} className={`tag ${subjectTag(sub)}`} style={{ fontSize:10 }}>{sub.slice(0,4)}</span>)}
+                          </div>
+                        </td>
+                        <td style={{ color:T.whiteDim }}>{s.testCount}</td>
+                        <td>
+                          <span style={{ fontSize:18, fontWeight:700, color:s.avg>=75?T.success:s.avg>=50?T.warning:T.danger }}>{s.avg}%</span>
+                        </td>
+                        <td style={{ minWidth:140 }}>
+                          <ScoreBar score={s.avg}/>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
+        </div>
+      )}
+
+      {/* QUESTION ANALYSIS TAB */}
+      {activeTab==="questions" && (
+        <div>
+          <div style={{ display:"flex", gap:10, marginBottom:20, alignItems:"center" }}>
+            <select value={selectedTest?.id||""} onChange={e=>setSelectedTest((tests||[]).find(t=>t.id===e.target.value)||null)} style={{ maxWidth:360 }}>
+              <option value="">Select a test...</option>
+              {(tests||[]).map(t=><option key={t.id} value={t.id}>{t.title} ({t.subject})</option>)}
+            </select>
+          </div>
+          {!selectedTest
+            ? <div className="empty-state"><h3>Select a test above</h3><p>See which questions students struggled with most</p></div>
+            : questionAnalysis.length===0
+            ? <div className="empty-state"><h3>No questions found</h3><p>Add questions to this test first</p></div>
+            : (
+              <div className="col">
+                <div className="glass" style={{ padding:22, marginBottom:4 }}>
+                  <h3 className="display" style={{ fontSize:15, fontWeight:600, marginBottom:4 }}>{selectedTest.title}</h3>
+                  <p style={{ fontSize:13, color:T.whiteDim }}>Showing how students performed on each question</p>
+                </div>
+                {questionAnalysis.map((q,i)=>(
+                  <div key={q.id} className="glass" style={{ padding:20 }}>
+                    <div style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
+                      <div style={{ width:32, height:32, borderRadius:"50%", background:T.tealGlow, border:`1px solid ${T.teal}`, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13, color:T.teal, flexShrink:0 }}>{i+1}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:14, lineHeight:1.6, marginBottom:10 }}><RichContent content={q.content}/></div>
+                        <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+                          <span className={`badge ${q.type==="mcq"?"badge-teal":q.type==="long"?"badge-green":"badge-orange"}`}>{q.type}</span>
+                          <span style={{ fontSize:12, color:T.whiteDim }}>{q.attempts} attempt{q.attempts!==1?"s":""}</span>
+                          {q.pct!==null && (
+                            <>
+                              <span style={{ fontSize:12, color:T.whiteDim }}>Correct: {q.correct}/{q.attempts}</span>
+                              <span style={{ fontSize:12, fontWeight:700, color:q.pct>=75?T.success:q.pct>=50?T.warning:T.danger }}>{q.pct}% success rate</span>
+                              {q.pct<50 && <span className="badge badge-red">⚠ Reteach</span>}
+                            </>
+                          )}
+                          {q.pct===null && <span style={{ fontSize:12, color:T.whiteDim }}>Manual marking — no auto-stats</span>}
+                        </div>
+                        {q.pct!==null && q.attempts>0 && (
+                          <div className="progress-bar" style={{ marginTop:10 }}>
+                            <div className="progress-fill" style={{ width:`${q.pct}%`, background:`linear-gradient(90deg,${q.pct>=75?T.success:q.pct>=50?T.warning:T.danger},${q.pct>=75?T.success:q.pct>=50?T.warning:T.danger}88)` }}/>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── EVALUATIONS (FULL BUILD) ─────────────────────────────────────────────────
+const EvaluationsManager = ({ token, showToast }) => {
+  const { data:evals, loading, reload } = useDB(token,"evaluations","?order=created_at.desc");
+  const { data:responses }              = useDB(token,"evaluation_responses","?order=submitted_at.desc");
+  const [showCreate, setShowCreate]     = useState(false);
+  const [viewingEval, setViewingEval]   = useState(null);
+  const [form, setForm] = useState({ title:"", subject:"Mathematics", questions:[] });
   const [saving, setSaving] = useState(false);
-  const addFolder = async () => {
-    if(!name.trim())return;
+
+  const qTypes = [
+    { type:"rating",   label:"Rating Scale (1–5)" },
+    { type:"mcq",      label:"Multiple Choice"     },
+    { type:"text",     label:"Open Text"           },
+    { type:"yesno",    label:"Yes / No"            },
+  ];
+
+  const addQ = (type) => setForm(p=>({ ...p, questions:[...p.questions,{ id:Date.now(), type, text:"", options:type==="mcq"?["","",""]:[]} ]}));
+  const updateQ = (id,field,val) => setForm(p=>({ ...p, questions:p.questions.map(q=>q.id===id?{...q,[field]:val}:q) }));
+  const updateOpt = (id,i,val) => setForm(p=>({ ...p, questions:p.questions.map(q=>q.id===id?{...q,options:q.options.map((o,j)=>j===i?val:o)}:q) }));
+  const removeQ = (id) => setForm(p=>({ ...p, questions:p.questions.filter(q=>q.id!==id) }));
+
+  const handleCreate = async () => {
+    if(!form.title||form.questions.length===0){ showToast("Title and at least one question required","error"); return; }
     setSaving(true);
     try {
-      const t=await sb.from(token,"material_folders");
-      await t.insert({name:name.trim(),subject});
-      setName("");setShowNew(false);showToast("Folder created","success");reload();
-    } catch(e){showToast(e.message,"error");}
+      const t=await sb.from(token,"evaluations");
+      await t.insert({ title:form.title, subject:form.subject, questions:form.questions, active:true });
+      showToast("Evaluation created and published","success");
+      setShowCreate(false);
+      setForm({ title:"", subject:"Mathematics", questions:[] });
+      reload();
+    } catch(e){ showToast(e.message,"error"); }
     setSaving(false);
   };
-  const del = async (id) => {
-    try { const t=await sb.from(token,"material_folders"); await t.delete(`?id=eq.${id}`); showToast("Deleted","info"); reload(); }
-    catch(e){showToast(e.message,"error");}
+
+  const toggleActive = async (id, active) => {
+    try {
+      const t=await sb.from(token,"evaluations");
+      await t.update({active:!active},`?id=eq.${id}`);
+      showToast(active?"Evaluation closed":"Evaluation reopened","success");
+      reload();
+    } catch(e){ showToast(e.message,"error"); }
   };
-  const cfg = SUBJECT_CONFIG[subject];
+
+  const del = async (id) => {
+    try {
+      const t=await sb.from(token,"evaluations");
+      await t.delete(`?id=eq.${id}`);
+      showToast("Deleted","info"); reload();
+    } catch(e){ showToast(e.message,"error"); }
+  };
+
+  // Aggregate responses for a given eval
+  const getAggregated = (ev) => {
+    const rs = (responses||[]).filter(r=>r.evaluation_id===ev.id);
+    if(rs.length===0) return null;
+    const qs = ev.questions||[];
+    return qs.map(q=>{
+      const answers = rs.map(r=>r.answers?.[q.id]).filter(a=>a!==undefined&&a!=="");
+      let summary = null;
+      if(q.type==="rating"){
+        const avg = answers.length>0 ? (answers.reduce((s,a)=>s+Number(a),0)/answers.length).toFixed(1) : null;
+        const dist = [1,2,3,4,5].map(n=>({ n, count:answers.filter(a=>Number(a)===n).length }));
+        summary = { avg, dist, count:answers.length };
+      } else if(q.type==="mcq"||q.type==="yesno"){
+        const opts = q.type==="yesno"?["Yes","No"]:(q.options||[]);
+        const dist = opts.map(o=>({ o, count:answers.filter(a=>a===o).length }));
+        summary = { dist, count:answers.length };
+      } else if(q.type==="text"){
+        summary = { answers, count:answers.length };
+      }
+      return { ...q, summary };
+    });
+  };
+
+  if(viewingEval){
+    const aggregated = getAggregated(viewingEval);
+    const respCount  = (responses||[]).filter(r=>r.evaluation_id===viewingEval.id).length;
+    return (
+      <div className="animate-in">
+        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
+          <button className="btn-ghost" onClick={()=>setViewingEval(null)} style={{ padding:"8px 14px",fontSize:13 }}>← Back</button>
+          <div>
+            <h1 className="display section-title">{viewingEval.title}</h1>
+            <p className="section-sub">{respCount} response{respCount!==1?"s":""}</p>
+          </div>
+        </div>
+        {!aggregated
+          ? <div className="empty-state"><h3>No responses yet</h3><p>Students haven't submitted this evaluation yet</p></div>
+          : <div className="col">
+            {aggregated.map((q,i)=>(
+              <div key={q.id} className="glass" style={{ padding:24 }}>
+                <div style={{ fontWeight:600, fontSize:15, marginBottom:4 }}>Q{i+1}: {q.text}</div>
+                <div style={{ fontSize:12, color:T.whiteDim, marginBottom:16 }}>{q.summary?.count||0} responses</div>
+                {q.type==="rating" && q.summary && (
+                  <>
+                    <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
+                      <div style={{ fontSize:40, fontWeight:700, color:T.teal }}>{q.summary.avg}</div>
+                      <div style={{ fontSize:13, color:T.whiteDim }}>/ 5 average</div>
+                    </div>
+                    {q.summary.dist.map(d=>(
+                      <div key={d.n} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                        <span style={{ fontSize:13, minWidth:20, color:T.whiteDim }}>{d.n}★</span>
+                        <div className="progress-bar" style={{ flex:1 }}>
+                          <div className="progress-fill" style={{ width:q.summary.count>0?`${(d.count/q.summary.count)*100}%`:"0%" }}/>
+                        </div>
+                        <span style={{ fontSize:12, color:T.whiteDim, minWidth:24 }}>{d.count}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {(q.type==="mcq"||q.type==="yesno") && q.summary && q.summary.dist.map(d=>(
+                  <div key={d.o} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                    <span style={{ fontSize:13, minWidth:80, color:T.whiteDim }}>{d.o}</span>
+                    <div className="progress-bar" style={{ flex:1 }}>
+                      <div className="progress-fill" style={{ width:q.summary.count>0?`${(d.count/q.summary.count)*100}%`:"0%" }}/>
+                    </div>
+                    <span style={{ fontSize:12, color:T.whiteDim, minWidth:24 }}>{d.count}</span>
+                  </div>
+                ))}
+                {q.type==="text" && q.summary && (
+                  <div className="col" style={{ gap:8 }}>
+                    {q.summary.answers.length===0
+                      ? <p style={{ fontSize:13, color:T.whiteDim }}>No text responses yet</p>
+                      : q.summary.answers.map((a,i)=>(
+                        <div key={i} style={{ padding:"10px 14px", background:"rgba(255,255,255,.04)", borderRadius:8, fontSize:13, color:T.whiteDim, lineHeight:1.6 }}>"{a}"</div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        }
+      </div>
+    );
+  }
+
   return (
     <div className="animate-in">
       <div className="section-header">
-        <div><h1 className="display section-title">Material Library</h1><p className="section-sub">Manage and publish resources</p></div>
-        <div style={{ display:"flex",gap:9 }}>
-          <button className="btn-ghost" onClick={()=>setShowNew(true)}><Icon name="folder" size={14}/>New Folder</button>
-          <button className="btn-primary"><Icon name="upload" size={14}/>Upload File</button>
-        </div>
+        <div><h1 className="display section-title">Evaluations</h1><p className="section-sub">Collect student feedback on your lessons</p></div>
+        <button className="btn-primary" onClick={()=>setShowCreate(true)}><Icon name="plus" size={14}/>Create Evaluation</button>
       </div>
-      <div style={{ display:"flex",gap:8,marginBottom:22 }}>
-        {["Mathematics","Physics","Chemistry"].map(s=>{const c=SUBJECT_CONFIG[s];return(<button key={s} onClick={()=>setSubject(s)} style={{ padding:"8px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:500,transition:"all .2s",border:`1px solid ${subject===s?c.color:T.glassBorder}`,background:subject===s?c.bg:"transparent",color:subject===s?c.color:T.whiteDim }}>{s}</button>);})}
-      </div>
-      {loading?<div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div>:
-       (folders||[]).length===0?(
-        <div className="empty-state"><div style={{ fontSize:40,marginBottom:14,opacity:.5 }}>📁</div><h3>No folders yet</h3><p>Create folders to organise your {subject} materials</p><button className="btn-primary" onClick={()=>setShowNew(true)}>Create First Folder</button></div>
-       ):(
-        <div className="col">
-          {folders.map(folder=>(
-            <div key={folder.id} className="glass" style={{ overflow:"hidden" }}>
-              <div style={{ padding:"15px 18px",display:"flex",alignItems:"center",gap:11,cursor:"pointer" }} onClick={()=>setExpanded(p=>({...p,[folder.id]:!p[folder.id]}))}>
-                <span style={{ color:cfg.color }}><Icon name="folder" size={17}/></span>
-                <span style={{ flex:1,fontWeight:500,fontSize:14.5 }}>{folder.name}</span>
-                <button className="btn-danger" style={{ padding:"4px 9px" }} onClick={e=>{e.stopPropagation();del(folder.id)}}><Icon name="trash" size={13}/></button>
-                <span style={{ color:T.whiteDim,fontSize:12,transform:expanded[folder.id]?"rotate(180deg)":"none",transition:"transform .2s" }}>▼</span>
-              </div>
-              {expanded[folder.id]&&(
-                <div style={{ borderTop:`1px solid ${T.glassBorder}` }}>
-                  <div style={{ padding:"16px 18px",textAlign:"center",color:T.whiteDim,fontSize:13 }}>File upload connects to Supabase Storage (Phase 3)</div>
-                  <div style={{ padding:"10px 18px",borderTop:`1px solid ${T.glassBorder}` }}>
-                    <button className="btn-ghost" style={{ padding:"7px 14px",fontSize:12 }}><Icon name="upload" size={13}/>Upload to folder</button>
+
+      {loading
+        ? <div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div>
+        : (evals||[]).length===0
+        ? <div className="empty-state">
+            <div style={{ fontSize:40, marginBottom:14, opacity:.5 }}><Icon name="eval" size={40}/></div>
+            <h3>No evaluations yet</h3>
+            <p>Create a short feedback form for students to complete after each lesson</p>
+            <button className="btn-primary" onClick={()=>setShowCreate(true)}>Create First Evaluation</button>
+          </div>
+        : <div className="col">
+          {evals.map(ev=>{
+            const respCount=(responses||[]).filter(r=>r.evaluation_id===ev.id).length;
+            return (
+              <div key={ev.id} className="glass" style={{ padding:22, borderLeft:`3px solid ${ev.active?T.teal:T.whiteDim}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:6 }}>
+                      <span style={{ fontWeight:600, fontSize:15 }}>{ev.title}</span>
+                      <span className={`badge ${ev.active?"badge-green":"badge-gray"}`}>{ev.active?"Open":"Closed"}</span>
+                    </div>
+                    <div style={{ display:"flex", gap:10 }}>
+                      <span className={`tag ${subjectTag(ev.subject)}`}>{ev.subject}</span>
+                      <span style={{ fontSize:12, color:T.whiteDim }}>{(ev.questions||[]).length} questions</span>
+                      <span style={{ fontSize:12, color:T.whiteDim }}>{respCount} response{respCount!==1?"s":""}</span>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>setViewingEval(ev)}>Results</button>
+                    <button onClick={()=>toggleActive(ev.id,ev.active)} style={{ padding:"7px 13px",borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:500,border:`1px solid ${ev.active?"rgba(239,68,68,.3)":T.glassBorder}`,background:ev.active?"rgba(239,68,68,.1)":T.tealGlow,color:ev.active?T.danger:T.teal,display:"inline-flex",alignItems:"center" }}>
+                      {ev.active?"Close":"Reopen"}
+                    </button>
+                    <button className="btn-danger" style={{ padding:"7px 10px" }} onClick={()=>del(ev.id)}><Icon name="trash" size={14}/></button>
                   </div>
                 </div>
+              </div>
+            );
+          })}
+        </div>
+      }
+
+      {/* Create modal */}
+      {showCreate && (
+        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
+          <div className="modal modal-lg" onClick={e=>e.stopPropagation()} style={{ maxHeight:"92vh" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:22 }}>
+              <h2 className="display" style={{ fontSize:19, fontWeight:600 }}>Create Evaluation</h2>
+              <button onClick={()=>setShowCreate(false)} style={{ background:"none",border:"none",color:T.whiteDim,cursor:"pointer" }}><Icon name="close" size={20}/></button>
+            </div>
+            <div className="col">
+              <div className="input-group"><label>Title</label><input placeholder="e.g. After Class Feedback — Week 3" value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
+              <div className="input-group"><label>Subject</label>
+                <select value={form.subject} onChange={e=>setForm(p=>({...p,subject:e.target.value}))}>
+                  {["Mathematics","Physics","Chemistry"].map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Questions */}
+              <div>
+                <label>Questions ({form.questions.length})</label>
+                <div className="col" style={{ gap:10, marginTop:8 }}>
+                  {form.questions.map((q,i)=>(
+                    <div key={q.id} className="glass" style={{ padding:16 }}>
+                      <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+                        <span style={{ fontSize:12, color:T.whiteDim, fontWeight:600, minWidth:24 }}>Q{i+1}</span>
+                        <input placeholder="Question text..." value={q.text} onChange={e=>updateQ(q.id,"text",e.target.value)} style={{ flex:1 }}/>
+                        <button className="btn-danger" style={{ padding:"5px 9px" }} onClick={()=>removeQ(q.id)}><Icon name="trash" size={12}/></button>
+                      </div>
+                      {q.type==="mcq" && (
+                        <div style={{ paddingLeft:32 }}>
+                          {(q.options||[]).map((o,oi)=>(
+                            <input key={oi} placeholder={`Option ${oi+1}`} value={o} onChange={e=>updateOpt(q.id,oi,e.target.value)} style={{ marginBottom:6 }}/>
+                          ))}
+                          <button className="btn-ghost" style={{ padding:"4px 10px",fontSize:11 }} onClick={()=>setForm(p=>({...p,questions:p.questions.map(qq=>qq.id===q.id?{...qq,options:[...qq.options,""]}:qq)}))}>+ Option</button>
+                        </div>
+                      )}
+                      {q.type==="rating" && <p style={{ paddingLeft:32,fontSize:12,color:T.whiteDim }}>Students rate 1–5 stars</p>}
+                      {q.type==="yesno"  && <p style={{ paddingLeft:32,fontSize:12,color:T.whiteDim }}>Yes / No response</p>}
+                      {q.type==="text"   && <p style={{ paddingLeft:32,fontSize:12,color:T.whiteDim }}>Open text response</p>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add question buttons */}
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:12 }}>
+                  {qTypes.map(qt=>(
+                    <button key={qt.type} className="btn-ghost" style={{ padding:"7px 14px",fontSize:12 }} onClick={()=>addQ(qt.type)}>
+                      <Icon name="plus" size={12}/>{qt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display:"flex", gap:10 }}>
+                <button className="btn-ghost" onClick={()=>setShowCreate(false)} style={{ flex:1 }}>Cancel</button>
+                <button className="btn-primary" onClick={handleCreate} disabled={saving} style={{ flex:1,justifyContent:"center" }}>{saving?<span className="spinner"/>:"Create & Publish"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── STUDENT EVALUATIONS ──────────────────────────────────────────────────────
+const StudentEvaluations = ({ token, userEmail, subject }) => {
+  const { data:evals }     = useDB(token,"evaluations",`?subject=eq.${subject}&active=eq.true&order=created_at.desc`);
+  const { data:responses } = useDB(token,"evaluation_responses",`?student_email=eq.${encodeURIComponent(userEmail)}`);
+  const [taking, setTaking]   = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [saving, setSaving]   = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const hasResponded = (evalId) => (responses||[]).some(r=>r.evaluation_id===evalId);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      const t=await sb.from(token,"evaluation_responses");
+      await t.insert({ evaluation_id:taking.id, student_email:userEmail, answers });
+      setSubmitted(true);
+    } catch(e){ console.error(e); }
+    setSaving(false);
+  };
+
+  if(taking && !submitted){
+    const qs = taking.questions||[];
+    return (
+      <div className="animate-in">
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
+          <button className="btn-ghost" onClick={()=>setTaking(null)} style={{ padding:"6px 12px",fontSize:12 }}>← Back</button>
+          <h3 className="display" style={{ fontSize:17,fontWeight:600 }}>{taking.title}</h3>
+        </div>
+        <div className="col">
+          {qs.map((q,i)=>(
+            <div key={q.id} className="glass" style={{ padding:22 }}>
+              <div style={{ fontWeight:500, fontSize:15, marginBottom:14 }}>Q{i+1}: {q.text}</div>
+              {q.type==="rating" && (
+                <div style={{ display:"flex", gap:10 }}>
+                  {[1,2,3,4,5].map(n=>(
+                    <button key={n} onClick={()=>setAnswers(p=>({...p,[q.id]:n}))} style={{ flex:1,padding:12,borderRadius:10,cursor:"pointer",fontSize:20,transition:"all .2s",border:`1px solid ${answers[q.id]===n?T.teal:T.glassBorder}`,background:answers[q.id]===n?T.tealGlow:"transparent",color:answers[q.id]===n?T.teal:T.whiteDim }}>
+                      {n}★
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(q.type==="yesno"||q.type==="mcq") && (
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {(q.type==="yesno"?["Yes","No"]:(q.options||[])).map(opt=>(
+                    <div key={opt} onClick={()=>setAnswers(p=>({...p,[q.id]:opt}))} style={{ padding:"12px 16px",borderRadius:10,cursor:"pointer",transition:"all .2s",border:`1px solid ${answers[q.id]===opt?T.teal:T.glassBorder}`,background:answers[q.id]===opt?T.tealGlow:"transparent",color:answers[q.id]===opt?T.white:T.whiteDim,fontWeight:answers[q.id]===opt?500:400 }}>
+                      {opt}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {q.type==="text" && (
+                <textarea rows={4} placeholder="Write your response..." value={answers[q.id]||""} onChange={e=>setAnswers(p=>({...p,[q.id]:e.target.value}))} style={{ fontSize:14 }}/>
               )}
             </div>
           ))}
+          <button className="btn-primary" onClick={handleSubmit} disabled={saving} style={{ justifyContent:"center",padding:14 }}>
+            {saving?<span className="spinner"/>:"Submit Feedback"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if(submitted){
+    return (
+      <div className="animate-in" style={{ textAlign:"center", padding:"48px 24px" }}>
+        <div style={{ fontSize:60,marginBottom:16 }}>🙌</div>
+        <h2 className="display" style={{ fontSize:22,fontWeight:700,marginBottom:8 }}>Thank you!</h2>
+        <p style={{ color:T.whiteDim,marginBottom:24 }}>Your feedback has been submitted.</p>
+        <button className="btn-ghost" onClick={()=>{ setTaking(null); setSubmitted(false); setAnswers({}); }}>← Back to Evaluations</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Lesson Evaluations</h3>
+      {(evals||[]).length===0
+        ? <div className="empty-state"><h3>No evaluations open</h3><p>Your tutor will post evaluations after lessons</p></div>
+        : <div className="col">
+          {evals.map(ev=>{
+            const done = hasResponded(ev.id);
+            return (
+              <div key={ev.id} className="glass" style={{ padding:22, borderLeft:`3px solid ${done?T.success:T.teal}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontWeight:600,fontSize:15,marginBottom:4 }}>{ev.title}</div>
+                    <div style={{ fontSize:12,color:T.whiteDim }}>{(ev.questions||[]).length} questions</div>
+                  </div>
+                  {done
+                    ? <span className="badge badge-green">✓ Submitted</span>
+                    : <button className="btn-primary" style={{ padding:"9px 18px",fontSize:13 }} onClick={()=>{ setTaking(ev); setAnswers({}); setSubmitted(false); }}>Give Feedback →</button>
+                  }
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      }
+    </div>
+  );
+};
+
+// ─── MATERIALS MANAGER (with file upload) ────────────────────────────────────
+const MaterialsManager = ({ token, showToast }) => {
+  const [subject, setSubject]   = useState("Mathematics");
+  const { data:folders, loading, reload } = useDB(token,"material_folders",`?subject=eq.${subject}&order=created_at`,[subject]);
+  const { data:files, reload:reloadFiles } = useDB(token,"material_files","?order=created_at.desc");
+  const [expanded,     setExpanded]     = useState({});
+  const [showNewFolder,setShowNewFolder] = useState(false);
+  const [newFolderName,setNewFolderName] = useState("");
+  const [uploading,    setUploading]    = useState({});
+  const [saving,       setSaving]       = useState(false);
+  const fileInputRefs = useRef({});
+
+  const addFolder = async () => {
+    if(!newFolderName.trim()) return;
+    setSaving(true);
+    try {
+      const t=await sb.from(token,"material_folders");
+      await t.insert({name:newFolderName.trim(),subject});
+      setNewFolderName(""); setShowNewFolder(false);
+      showToast("Folder created","success"); reload();
+    } catch(e){ showToast(e.message,"error"); }
+    setSaving(false);
+  };
+
+  const delFolder = async (id) => {
+    try { const t=await sb.from(token,"material_folders"); await t.delete(`?id=eq.${id}`); showToast("Deleted","info"); reload(); }
+    catch(e){ showToast(e.message,"error"); }
+  };
+
+  const handleFileUpload = async (folderId, e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    if(file.size > 10*1024*1024){ showToast("File must be under 10MB","error"); return; }
+    setUploading(p=>({...p,[folderId]:true}));
+    try {
+      // Store file as base64 in material_files table
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const t=await sb.from(token,"material_files");
+          await t.insert({
+            folder_id: folderId,
+            name: file.name,
+            subject,
+            file_url: ev.target.result,
+            file_size: `${(file.size/1024).toFixed(0)} KB`,
+            published: false,
+          });
+          showToast(`${file.name} uploaded`,"success");
+          reloadFiles();
+        } catch(e){ showToast(e.message,"error"); }
+        setUploading(p=>({...p,[folderId]:false}));
+      };
+      reader.readAsDataURL(file);
+    } catch(e){ showToast(e.message,"error"); setUploading(p=>({...p,[folderId]:false})); }
+  };
+
+  const togglePublish = async (fileId, published) => {
+    try {
+      const t=await sb.from(token,"material_files");
+      await t.update({published:!published},`?id=eq.${fileId}`);
+      showToast(published?"Unpublished":"Published to students","success");
+      reloadFiles();
+    } catch(e){ showToast(e.message,"error"); }
+  };
+
+  const delFile = async (fileId, name) => {
+    try {
+      const t=await sb.from(token,"material_files");
+      await t.delete(`?id=eq.${fileId}`);
+      showToast(`${name} deleted`,"info");
+      reloadFiles();
+    } catch(e){ showToast(e.message,"error"); }
+  };
+
+  const folderFiles = (folderId) => (files||[]).filter(f=>f.folder_id===folderId);
+  const cfg = SUBJECT_CONFIG[subject];
+
+  return (
+    <div className="animate-in">
+      <div className="section-header">
+        <div><h1 className="display section-title">Material Library</h1><p className="section-sub">Upload and publish resources for students</p></div>
+        <button className="btn-ghost" onClick={()=>setShowNewFolder(true)}><Icon name="folder" size={14}/>New Folder</button>
+      </div>
+
+      <div style={{ display:"flex", gap:8, marginBottom:22 }}>
+        {["Mathematics","Physics","Chemistry"].map(s=>{
+          const c=SUBJECT_CONFIG[s];
+          return <button key={s} onClick={()=>setSubject(s)} style={{ padding:"8px 18px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:500,transition:"all .2s",border:`1px solid ${subject===s?c.color:T.glassBorder}`,background:subject===s?c.bg:"transparent",color:subject===s?c.color:T.whiteDim }}>{s}</button>;
+        })}
+      </div>
+
+      {loading ? <div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div> :
+       (folders||[]).length===0 ? (
+        <div className="empty-state">
+          <div style={{ fontSize:40,marginBottom:14,opacity:.5 }}>📁</div>
+          <h3>No folders yet for {subject}</h3>
+          <p>Create a folder to start organising your materials</p>
+          <button className="btn-primary" onClick={()=>setShowNewFolder(true)}>Create First Folder</button>
+        </div>
+       ) : (
+        <div className="col">
+          {folders.map(folder=>{
+            const fFiles = folderFiles(folder.id);
+            const isExp  = expanded[folder.id];
+            return (
+              <div key={folder.id} className="glass" style={{ overflow:"hidden" }}>
+                {/* Folder header */}
+                <div style={{ padding:"15px 18px",display:"flex",alignItems:"center",gap:11,cursor:"pointer" }} onClick={()=>setExpanded(p=>({...p,[folder.id]:!p[folder.id]}))}>
+                  <span style={{ color:cfg.color }}><Icon name="folder" size={17}/></span>
+                  <span style={{ flex:1,fontWeight:500,fontSize:14.5 }}>{folder.name}</span>
+                  <span style={{ fontSize:12,color:T.whiteDim }}>{fFiles.length} file{fFiles.length!==1?"s":""}</span>
+                  <span style={{ fontSize:11,color:T.whiteDim,background:T.tealGlow,padding:"2px 8px",borderRadius:4 }}>
+                    {fFiles.filter(f=>f.published).length} published
+                  </span>
+                  <button className="btn-danger" style={{ padding:"4px 9px" }} onClick={e=>{e.stopPropagation();delFolder(folder.id)}}><Icon name="trash" size={13}/></button>
+                  <span style={{ color:T.whiteDim,fontSize:12,transform:isExp?"rotate(180deg)":"none",transition:"transform .2s" }}>▼</span>
+                </div>
+
+                {isExp && (
+                  <div style={{ borderTop:`1px solid ${T.glassBorder}` }}>
+                    {fFiles.length===0
+                      ? <div style={{ padding:"20px 18px",textAlign:"center",color:T.whiteDim,fontSize:13 }}>No files yet — upload below</div>
+                      : fFiles.map(file=>(
+                        <div key={file.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:`1px solid ${T.glassBorder}` }}>
+                          <span style={{ fontSize:20 }}>
+                            {file.name.endsWith(".pdf")?"📄":file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)?"🖼":file.name.match(/\.(mp4|mov|avi)$/i)?"🎥":"📎"}
+                          </span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13,fontWeight:500 }}>{file.name}</div>
+                            <div style={{ fontSize:11,color:T.whiteDim }}>{file.file_size}</div>
+                          </div>
+                          <span className={`badge ${file.published?"badge-green":"badge-orange"}`}>{file.published?"Published":"Private"}</span>
+                          {file.file_url && (
+                            <a href={file.file_url} download={file.name} className="btn-ghost" style={{ padding:"5px 12px",fontSize:12,textDecoration:"none" }}>⬇</a>
+                          )}
+                          <button onClick={()=>togglePublish(file.id,file.published)} className="btn-ghost" style={{ padding:"5px 12px",fontSize:12 }}>
+                            {file.published?"Unpublish":"Publish"}
+                          </button>
+                          <button className="btn-danger" style={{ padding:"5px 9px" }} onClick={()=>delFile(file.id,file.name)}><Icon name="trash" size={13}/></button>
+                        </div>
+                      ))
+                    }
+                    {/* Upload area */}
+                    <div style={{ padding:"12px 18px",display:"flex",alignItems:"center",gap:10 }}>
+                      <input ref={el=>fileInputRefs.current[folder.id]=el} type="file" style={{ display:"none" }} onChange={e=>handleFileUpload(folder.id,e)} accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.mp4,.zip"/>
+                      <button className="btn-ghost" style={{ padding:"8px 16px",fontSize:12 }} disabled={uploading[folder.id]} onClick={()=>fileInputRefs.current[folder.id]?.click()}>
+                        {uploading[folder.id]?<><span className="spinner"/><span style={{ marginLeft:6 }}>Uploading...</span></>:<><Icon name="upload" size={13}/>Upload File</>}
+                      </button>
+                      <span style={{ fontSize:11,color:T.whiteDim }}>PDF, Word, PowerPoint, images, MP4 — max 10MB</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
        )}
-      {showNew&&(
-        <div className="modal-overlay" onClick={()=>setShowNew(false)}>
+
+      {showNewFolder && (
+        <div className="modal-overlay" onClick={()=>setShowNewFolder(false)}>
           <div className="modal" style={{ maxWidth:380 }} onClick={e=>e.stopPropagation()}>
             <h2 className="display" style={{ fontSize:18,fontWeight:600,marginBottom:18 }}>New Folder — {subject}</h2>
-            <input placeholder="Folder name" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addFolder()} autoFocus/>
+            <input placeholder="Folder name" value={newFolderName} onChange={e=>setNewFolderName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addFolder()} autoFocus/>
             <div style={{ display:"flex",gap:10,marginTop:14 }}>
-              <button className="btn-ghost" onClick={()=>setShowNew(false)} style={{ flex:1 }}>Cancel</button>
+              <button className="btn-ghost" onClick={()=>setShowNewFolder(false)} style={{ flex:1 }}>Cancel</button>
               <button className="btn-primary" onClick={addFolder} disabled={saving} style={{ flex:1,justifyContent:"center" }}>{saving?<span className="spinner"/>:"Create"}</button>
             </div>
           </div>
@@ -677,6 +1424,57 @@ const MaterialsManager = ({ token, showToast }) => {
   );
 };
 
+// ─── STUDENT MATERIALS VIEW ───────────────────────────────────────────────────
+const StudentMaterials = ({ token, subject }) => {
+  const { data:folders } = useDB(token,"material_folders",`?subject=eq.${subject}&order=created_at`,[subject]);
+  const { data:files   } = useDB(token,"material_files",`?subject=eq.${subject}&published=eq.true&order=created_at.desc`,[subject]);
+  const [expanded, setExpanded] = useState({});
+
+  const folderFiles = (fid) => (files||[]).filter(f=>f.folder_id===fid);
+
+  if((folders||[]).length===0) return <div className="empty-state"><h3>No materials yet</h3><p>Your tutor will upload study materials here</p></div>;
+
+  return (
+    <div>
+      <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Study Materials</h3>
+      <div className="col">
+        {folders.map(folder=>{
+          const fFiles=folderFiles(folder.id);
+          const cfg=SUBJECT_CONFIG[subject];
+          return (
+            <div key={folder.id} className="glass" style={{ overflow:"hidden" }}>
+              <div style={{ padding:"14px 18px",display:"flex",alignItems:"center",gap:11,cursor:"pointer" }} onClick={()=>setExpanded(p=>({...p,[folder.id]:!p[folder.id]}))}>
+                <span style={{ color:cfg.color }}><Icon name="folder" size={16}/></span>
+                <span style={{ flex:1,fontWeight:500 }}>{folder.name}</span>
+                <span style={{ fontSize:12,color:T.whiteDim }}>{fFiles.length} file{fFiles.length!==1?"s":""}</span>
+                <span style={{ color:T.whiteDim,fontSize:12,transform:expanded[folder.id]?"rotate(180deg)":"none",transition:"transform .2s" }}>▼</span>
+              </div>
+              {expanded[folder.id] && (
+                <div style={{ borderTop:`1px solid ${T.glassBorder}` }}>
+                  {fFiles.length===0
+                    ? <div style={{ padding:"16px 18px",textAlign:"center",color:T.whiteDim,fontSize:13 }}>No files in this folder yet</div>
+                    : fFiles.map(file=>(
+                      <div key={file.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:`1px solid ${T.glassBorder}` }}>
+                        <span style={{ fontSize:18 }}>{file.name.endsWith(".pdf")?"📄":file.name.match(/\.(jpg|jpeg|png|gif)$/i)?"🖼":"📎"}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:13,fontWeight:500 }}>{file.name}</div>
+                          <div style={{ fontSize:11,color:T.whiteDim }}>{file.file_size}</div>
+                        </div>
+                        {file.file_url && (
+                          <a href={file.file_url} download={file.name} className="btn-primary" style={{ padding:"7px 14px",fontSize:12,textDecoration:"none" }}>⬇ Download</a>
+                        )}
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 const AnnouncementsManager = ({ token, showToast }) => {
   const { data:list, loading, reload } = useDB(token,"announcements","?order=created_at.desc");
   const [showAdd, setShowAdd] = useState(false);
@@ -837,47 +1635,6 @@ const ScheduleManager = ({ token, showToast }) => {
   );
 };
 
-const Analytics = ({ token }) => {
-  const { data:students } = useDB(token,"profiles","?role=eq.student");
-  const { data:tests } = useDB(token,"tests","?status=neq.draft");
-  return (
-    <div className="animate-in">
-      <h1 className="display section-title" style={{ marginBottom:4 }}>Analytics</h1>
-      <p className="section-sub" style={{ marginBottom:28 }}>Performance insights across all subjects</p>
-      <div className="grid-3" style={{ marginBottom:28 }}>
-        {["Mathematics","Physics","Chemistry"].map(s=>{
-          const cfg=SUBJECT_CONFIG[s];
-          const count=(students||[]).filter(st=>(st.subjects||[]).includes(s)).length;
-          return (
-            <div key={s} className="glass" style={{ padding:22,borderTop:`3px solid ${cfg.color}` }}>
-              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:12 }}>
-                <span className={`tag ${subjectTag(s)}`}>{s}</span>
-                <span style={{ fontSize:26,fontWeight:700,color:cfg.color }}>{count}</span>
-              </div>
-              <div style={{ fontSize:12,color:T.whiteDim,marginBottom:12 }}>Students enrolled</div>
-              <div className="progress-bar"><div className="progress-fill" style={{ width:`${Math.min((count/100)*100,100)}%`,background:`linear-gradient(90deg,${cfg.color},${cfg.color}88)` }}/></div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="glass" style={{ padding:22 }}>
-        <h3 className="display" style={{ fontSize:15,fontWeight:600,marginBottom:18 }}>Tests Overview</h3>
-        {!tests?<div style={{ color:T.whiteDim,fontSize:13 }}>Loading...</div>:
-         tests.length===0?<div className="empty-state"><p>No published tests yet</p></div>:
-         tests.map(t=>(
-          <div key={t.id} style={{ display:"flex",alignItems:"center",gap:14,marginBottom:12 }}>
-            <div style={{ width:200 }}>
-              <div style={{ fontSize:13,fontWeight:500,marginBottom:3 }}>{t.title}</div>
-              <span className={`tag ${subjectTag(t.subject)}`}>{t.subject}</span>
-            </div>
-            <div style={{ flex:1 }}><div className="progress-bar"><div className="progress-fill" style={{ width:"0%" }}/></div></div>
-            <span style={{ fontSize:12,color:T.whiteDim,minWidth:120,textAlign:"right" }}>No submissions yet</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
 const VideoLibrary = ({ token, showToast }) => {
   const [subject, setSubject] = useState("Mathematics");
   const { data:videos, loading, reload } = useDB(token,"videos",`?subject=eq.${subject}&order=created_at.desc`,[subject]);
@@ -1043,18 +1800,7 @@ const QuestionBank = ({ showToast }) => (
   </div>
 );
 
-const EvaluationsManager = ({ showToast }) => (
-  <div className="animate-in">
-    <h1 className="display section-title" style={{ marginBottom:4 }}>Evaluations</h1>
-    <p className="section-sub" style={{ marginBottom:28 }}>Student feedback on your lessons — Phase 6</p>
-    <div className="glass" style={{ padding:48,textAlign:"center" }}>
-      <div style={{ color:T.teal,marginBottom:14 }}><Icon name="eval" size={48}/></div>
-      <h3 className="display" style={{ fontSize:19,fontWeight:600,marginBottom:8 }}>Lesson Feedback System</h3>
-      <p style={{ color:T.whiteDim,fontSize:14,maxWidth:440,margin:"0 auto 22px",lineHeight:1.65 }}>Create short feedback forms after each lesson — rating scales, multiple choice and open text. See aggregated results to understand which lessons landed and which need improvement.</p>
-      <button className="btn-primary" onClick={()=>showToast("Evaluations builder coming in Phase 6!","info")}><Icon name="plus" size={14}/>Create Evaluation</button>
-    </div>
-  </div>
-);
+
 
 const SettingsPage = ({ token, showToast, user }) => {
   const { data:tutors, loading, reload } = useDB(token,"profiles","?role=eq.tutor");
@@ -2121,7 +2867,7 @@ const StudentApp = ({ user, onLogout, token }) => {
             ))}
         </div>
       );
-      case "materials":   return (<div><h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Study Materials</h3><div className="empty-state"><h3>No materials yet</h3><p>Your tutor will upload materials here</p></div></div>);
+      case "materials":   return <StudentMaterials token={token} subject={selectedSubject}/>;
       case "grades":      return <StudentGrades token={token} userEmail={user.email} subject={selectedSubject}/>;
       case "tests":       return <StudentTestsList token={token} userEmail={user.email} subject={selectedSubject}/>;
       case "videos":      return (
@@ -2138,7 +2884,7 @@ const StudentApp = ({ user, onLogout, token }) => {
             ))}
         </div>
       );
-      case "evaluations": return (<div><h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Evaluations</h3><div className="empty-state"><h3>No evaluations open</h3><p>Your tutor will post evaluations after lessons</p></div></div>);
+      case "evaluations": return <StudentEvaluations token={token} userEmail={user.email} subject={selectedSubject}/>;
       default: return <div style={{ color:T.whiteDim }}>Coming soon</div>;
     }
   };
