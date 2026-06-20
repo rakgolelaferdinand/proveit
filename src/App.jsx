@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 
 const SUPABASE_URL = "https://ehpwkfhqlxtjzkkaokfx.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVocHdrZmhxbHh0anpra2Fva2Z4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MTQ5NjksImV4cCI6MjA5NzM5MDk2OX0.hHxdvNGc0sbdd6CS_oUOgm6o74qK3W1V9HeiaJNGyL4";
@@ -677,99 +677,6 @@ const MaterialsManager = ({ token, showToast }) => {
   );
 };
 
-const TestsManager = ({ token, showToast, onMark }) => {
-  const { data:tests, loading, reload } = useDB(token,"tests","?order=created_at.desc");
-  const [showCreate, setShowCreate] = useState(false);
-  const [filterSubject, setFilterSubject] = useState("all");
-  const [form, setForm] = useState({ title:"", subject:"Mathematics", due_date:"", attempts_allowed:1, marking_mode:"manual", show_results_immediately:false });
-  const [saving, setSaving] = useState(false);
-  const filtered = (tests||[]).filter(t=>filterSubject==="all"||t.subject===filterSubject);
-  const handleCreate = async () => {
-    if(!form.title||!form.due_date){showToast("Title and due date required","error");return;}
-    setSaving(true);
-    try {
-      const t=await sb.from(token,"tests"); await t.insert({...form,status:"draft"});
-      showToast("Test created","success");setShowCreate(false);
-      setForm({title:"",subject:"Mathematics",due_date:"",attempts_allowed:1,marking_mode:"manual",show_results_immediately:false});reload();
-    } catch(e){showToast(e.message,"error");}
-    setSaving(false);
-  };
-  const del = async (id) => { try { const t=await sb.from(token,"tests"); await t.delete(`?id=eq.${id}`); showToast("Deleted","info"); reload(); } catch(e){showToast(e.message,"error");} };
-  const setStatus = async (id,status) => { try { const t=await sb.from(token,"tests"); await t.update({status},`?id=eq.${id}`); showToast(`Test ${status}`,"success"); reload(); } catch(e){showToast(e.message,"error");} };
-  return (
-    <div className="animate-in">
-      <div className="section-header">
-        <div><h1 className="display section-title">Tests & Assignments</h1><p className="section-sub">Create, manage and mark assessments</p></div>
-        <button className="btn-primary" onClick={()=>setShowCreate(true)}><Icon name="plus" size={14}/>Create Test</button>
-      </div>
-      <div style={{ display:"flex",gap:8,marginBottom:18 }}>
-        {["all","Mathematics","Physics","Chemistry"].map(f=><button key={f} className={`chip-filter ${filterSubject===f?"active":""}`} onClick={()=>setFilterSubject(f)}>{f==="all"?"All":f}</button>)}
-      </div>
-      {loading?<div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div>:
-       filtered.length===0?<div className="empty-state"><h3>No tests yet</h3><p>Create your first test</p><button className="btn-primary" onClick={()=>setShowCreate(true)}>Create Test</button></div>:(
-        <div className="col">
-          {filtered.map(t=>(
-            <div key={t.id} className="glass" style={{ padding:20,display:"flex",alignItems:"center",gap:14 }}>
-              <div style={{ flex:1 }}>
-                <div style={{ display:"flex",gap:8,alignItems:"center",marginBottom:6 }}>
-                  <span style={{ fontWeight:600,fontSize:15 }}>{t.title}</span>
-                  <span className={`badge ${t.status==="active"?"badge-green":t.status==="closed"?"badge-gray":"badge-teal"}`}>{t.status}</span>
-                  <span className="badge badge-orange" style={{ fontSize:10 }}>{t.marking_mode}</span>
-                </div>
-                <div style={{ display:"flex",gap:10,alignItems:"center" }}>
-                  <span className={`tag ${subjectTag(t.subject)}`}>{t.subject}</span>
-                  <span style={{ fontSize:12,color:T.whiteDim }}>Due: {t.due_date}</span>
-                  <span style={{ fontSize:12,color:T.whiteDim }}>{t.attempts_allowed===99?"Unlimited":t.attempts_allowed} attempt{t.attempts_allowed!==1?"s":""}</span>
-                </div>
-              </div>
-              <div style={{ display:"flex",gap:8 }}>
-                {t.status==="draft"&&<button className="btn-success" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>setStatus(t.id,"active")}><Icon name="check" size={13}/>Publish</button>}
-                {t.status==="active"&&<button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>setStatus(t.id,"closed")}>Close</button>}
-                <button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12 }}><Icon name="edit" size={13}/>Edit</button>
-                <button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12, color:T.accent, borderColor:"rgba(255,107,53,.3)" }} onClick={()=>onMark&&onMark(t)}><Icon name="eye" size={13}/>Mark</button>
-                <button className="btn-danger" style={{ padding:"7px 10px" }} onClick={()=>del(t.id)}><Icon name="trash" size={14}/></button>
-              </div>
-            </div>
-          ))}
-        </div>
-       )}
-      {showCreate&&(
-        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
-          <div className="modal modal-lg" onClick={e=>e.stopPropagation()}>
-            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:22 }}>
-              <h2 className="display" style={{ fontSize:19,fontWeight:600 }}>Create Test</h2>
-              <button onClick={()=>setShowCreate(false)} style={{ background:"none",border:"none",color:T.whiteDim,cursor:"pointer" }}><Icon name="close" size={20}/></button>
-            </div>
-            <div className="col">
-              <div className="input-group"><label>Test Title</label><input placeholder="e.g. Functions & Graphs Test 1" value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
-              <div className="grid-2">
-                <div className="input-group"><label>Subject</label><select value={form.subject} onChange={e=>setForm(p=>({...p,subject:e.target.value}))}>{["Mathematics","Physics","Chemistry"].map(s=><option key={s}>{s}</option>)}</select></div>
-                <div className="input-group"><label>Due Date</label><input type="date" value={form.due_date} onChange={e=>setForm(p=>({...p,due_date:e.target.value}))}/></div>
-              </div>
-              <div className="grid-2">
-                <div className="input-group"><label>Attempts</label><select value={form.attempts_allowed} onChange={e=>setForm(p=>({...p,attempts_allowed:Number(e.target.value)}))}><option value={1}>1 attempt</option><option value={2}>2 attempts</option><option value={3}>3 attempts</option><option value={99}>Unlimited</option></select></div>
-                <div className="input-group"><label>Marking Mode</label><select value={form.marking_mode} onChange={e=>setForm(p=>({...p,marking_mode:e.target.value}))}><option value="manual">Manual (I mark it)</option><option value="auto">Auto-mark</option><option value="mixed">Mixed</option></select></div>
-              </div>
-              {form.marking_mode!=="manual"&&(
-                <label style={{ display:"flex",alignItems:"center",gap:9,textTransform:"none",letterSpacing:0,fontSize:14,fontWeight:400 }}>
-                  <input type="checkbox" style={{ width:"auto" }} checked={form.show_results_immediately} onChange={e=>setForm(p=>({...p,show_results_immediately:e.target.checked}))}/>
-                  Show results immediately after submission
-                </label>
-              )}
-              <div style={{ background:T.tealGlow,borderRadius:10,padding:"12px 14px",fontSize:13,color:T.teal,display:"flex",gap:8 }}>
-                <Icon name="info" size={15}/>After creating, go to <strong>Question Bank</strong> to add questions with LaTeX, images and symbols.
-              </div>
-              <div style={{ display:"flex",gap:10 }}>
-                <button className="btn-ghost" onClick={()=>setShowCreate(false)} style={{ flex:1 }}>Cancel</button>
-                <button className="btn-primary" onClick={handleCreate} disabled={saving} style={{ flex:1,justifyContent:"center" }}>{saving?<span className="spinner"/>:"Create Test"}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 const AnnouncementsManager = ({ token, showToast }) => {
   const { data:list, loading, reload } = useDB(token,"announcements","?order=created_at.desc");
   const [showAdd, setShowAdd] = useState(false);
@@ -1120,9 +1027,96 @@ const QuotesManager = ({ token, showToast }) => {
   );
 };
 
-// ─── PHASE 3: QUESTION BANK + TEST ENGINE ────────────────────────────────────
+const QuestionBank = ({ showToast }) => (
+  <div className="animate-in">
+    <h1 className="display section-title" style={{ marginBottom:4 }}>Question Bank</h1>
+    <p className="section-sub" style={{ marginBottom:28 }}>Private reusable question library — Phase 4</p>
+    <div className="glass" style={{ padding:48,textAlign:"center" }}>
+      <div style={{ color:T.teal,marginBottom:14 }}><Icon name="bank" size={48}/></div>
+      <h3 className="display" style={{ fontSize:19,fontWeight:600,marginBottom:8 }}>Rich Question Editor</h3>
+      <p style={{ color:T.whiteDim,fontSize:14,maxWidth:460,margin:"0 auto 22px",lineHeight:1.65 }}>Full LaTeX equation support, chemistry notation (H₂O, →, ⇌), physics symbols (Δ, Σ, ∫, Ω), image embedding, MCQ, short answer, long answer and calculated question types. Private to you — publish to any test when ready.</p>
+      <div style={{ display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginBottom:22 }}>
+        {["LaTeX Equations","Chemistry Symbols","Physics Notation","Image Embedding","MCQ","Short Answer","Long Answer"].map(f=><span key={f} className="badge badge-teal" style={{ padding:"5px 12px" }}>{f}</span>)}
+      </div>
+      <button className="btn-primary" onClick={()=>showToast("Question editor coming in Phase 4!","info")}><Icon name="plus" size={14}/>Create Question</button>
+    </div>
+  </div>
+);
 
-// LaTeX renderer using KaTeX via CDN (loaded dynamically)
+const EvaluationsManager = ({ showToast }) => (
+  <div className="animate-in">
+    <h1 className="display section-title" style={{ marginBottom:4 }}>Evaluations</h1>
+    <p className="section-sub" style={{ marginBottom:28 }}>Student feedback on your lessons — Phase 6</p>
+    <div className="glass" style={{ padding:48,textAlign:"center" }}>
+      <div style={{ color:T.teal,marginBottom:14 }}><Icon name="eval" size={48}/></div>
+      <h3 className="display" style={{ fontSize:19,fontWeight:600,marginBottom:8 }}>Lesson Feedback System</h3>
+      <p style={{ color:T.whiteDim,fontSize:14,maxWidth:440,margin:"0 auto 22px",lineHeight:1.65 }}>Create short feedback forms after each lesson — rating scales, multiple choice and open text. See aggregated results to understand which lessons landed and which need improvement.</p>
+      <button className="btn-primary" onClick={()=>showToast("Evaluations builder coming in Phase 6!","info")}><Icon name="plus" size={14}/>Create Evaluation</button>
+    </div>
+  </div>
+);
+
+const SettingsPage = ({ token, showToast, user }) => {
+  const { data:tutors, loading, reload } = useDB(token,"profiles","?role=eq.tutor");
+  const [newEmail, setNewEmail] = useState("");
+  const [newTab, setNewTab] = useState("");
+  const [customTabs, setCustomTabs] = useState([]);
+  const addTutor = async () => {
+    if(!newEmail)return;
+    try { const t=await sb.from(token,"profiles"); await t.upsert({email:newEmail.trim(),role:"tutor",name:newEmail.split("@")[0],subjects:["Mathematics","Physics","Chemistry"]}); showToast("Tutor access granted","success"); setNewEmail(""); reload(); }
+    catch(e){showToast(e.message,"error");}
+  };
+  const removeTutor = async (email) => {
+    if(email===user.email){showToast("Cannot remove yourself","error");return;}
+    try { const t=await sb.from(token,"profiles"); await t.update({role:"student"},`?email=eq.${encodeURIComponent(email)}`); showToast("Removed","info"); reload(); }
+    catch(e){showToast(e.message,"error");}
+  };
+  return (
+    <div className="animate-in">
+      <h1 className="display section-title" style={{ marginBottom:4 }}>Settings</h1>
+      <p className="section-sub" style={{ marginBottom:28 }}>Platform configuration and access control</p>
+      <div className="col">
+        <div className="glass" style={{ padding:24 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:6 }}><Icon name="shield" size={18}/><h3 className="display" style={{ fontSize:16,fontWeight:600 }}>Tutor Access Control</h3></div>
+          <p style={{ color:T.whiteDim,fontSize:13,marginBottom:18 }}>Only these emails can access the Tutor Portal</p>
+          <div style={{ display:"flex",gap:9,marginBottom:14 }}>
+            <input placeholder="Add tutor email..." value={newEmail} onChange={e=>setNewEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTutor()}/>
+            <button className="btn-primary" onClick={addTutor}>Add</button>
+          </div>
+          {loading?<div style={{ color:T.whiteDim,fontSize:13 }}>Loading...</div>:
+           (tutors||[]).map(t=>(
+            <div key={t.email} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(0,212,200,.05)",borderRadius:8,border:`1px solid ${T.glassBorder}`,marginBottom:8 }}>
+              <div style={{ display:"flex",alignItems:"center",gap:10 }}><Avatar name={t.name} size={28}/><span style={{ fontSize:14 }}>{t.email}</span>{t.email===user.email&&<span className="badge badge-teal">You</span>}</div>
+              <button className="btn-danger" style={{ padding:"5px 11px",fontSize:12 }} onClick={()=>removeTutor(t.email)}>Remove</button>
+            </div>
+          ))}
+        </div>
+        <div className="glass" style={{ padding:24 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:6 }}><Icon name="dashboard" size={18}/><h3 className="display" style={{ fontSize:16,fontWeight:600 }}>Student Subject Tabs</h3></div>
+          <p style={{ color:T.whiteDim,fontSize:13,marginBottom:18 }}>Manage the tabs students see inside each subject</p>
+          <div style={{ display:"flex",gap:9,marginBottom:14 }}>
+            <input placeholder="New tab name..." value={newTab} onChange={e=>setNewTab(e.target.value)}/>
+            <button className="btn-primary" onClick={()=>{ if(newTab.trim()){setCustomTabs(p=>[...p,{id:`c-${Date.now()}`,label:newTab.trim()}]);setNewTab("");showToast("Tab added","success");} }}>Add Tab</button>
+          </div>
+          {DEFAULT_TABS.map(t=>(
+            <div key={t.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:"rgba(255,255,255,.03)",borderRadius:8,border:`1px solid ${T.glassBorder}`,marginBottom:6 }}>
+              <Icon name={t.icon} size={14}/><span style={{ flex:1,fontSize:14 }}>{t.label}</span><span className="badge badge-gray">Default</span>
+            </div>
+          ))}
+          {customTabs.map(t=>(
+            <div key={t.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:"rgba(255,255,255,.03)",borderRadius:8,border:`1px solid ${T.glassBorder}`,marginBottom:6 }}>
+              <span style={{ flex:1,fontSize:14 }}>{t.label}</span>
+              <button className="btn-danger" style={{ padding:"4px 9px",fontSize:12 }} onClick={()=>setCustomTabs(p=>p.filter(x=>x.id!==t.id))}>Remove</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+// ─── PHASE 3+4: COMPLETE TEST ENGINE ─────────────────────────────────────────
+
+// ─── LaTeX / KaTeX loader ────────────────────────────────────────────────────
 const loadKaTeX = () => {
   if (window.katex) return Promise.resolve();
   return new Promise((resolve) => {
@@ -1138,165 +1132,330 @@ const loadKaTeX = () => {
 };
 
 const renderLatex = (text) => {
-  if (!text) return "";
-  if (!window.katex) return text;
+  if (!text || !window.katex) return text || "";
   try {
-    return text.replace(/\$\$([^$]+)\$\$/g, (_, math) => {
-      try { return window.katex.renderToString(math, { displayMode: true, throwOnError: false }); }
-      catch(e) { return `<span style="color:#EF4444">LaTeX error</span>`; }
-    }).replace(/\$([^$]+)\$/g, (_, math) => {
-      try { return window.katex.renderToString(math, { displayMode: false, throwOnError: false }); }
-      catch(e) { return `<span style="color:#EF4444">LaTeX error</span>`; }
-    });
+    return text
+      .replace(/\$\$([^$]+)\$\$/g, (_, m) => { try { return window.katex.renderToString(m, { displayMode:true, throwOnError:false }); } catch(e) { return _; } })
+      .replace(/\$([^$]+)\$/g,   (_, m) => { try { return window.katex.renderToString(m, { displayMode:false, throwOnError:false }); } catch(e) { return _; } });
   } catch(e) { return text; }
 };
 
-// Rich text display component
 const RichText = ({ content }) => {
-  const [rendered, setRendered] = useState(content || "");
-  useEffect(() => {
-    loadKaTeX().then(() => setRendered(renderLatex(content || "")));
-  }, [content]);
-  return <span dangerouslySetInnerHTML={{ __html: rendered }} />;
+  const [html, setHtml] = useState(content || "");
+  useEffect(() => { loadKaTeX().then(() => setHtml(renderLatex(content || ""))); }, [content]);
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
-// ─── QUESTION EDITOR MODAL ───────────────────────────────────────────────────
+// ─── IMAGE UPLOAD HELPER (base64 for questions) ───────────────────────────────
+const ImageUploader = ({ onInsert }) => {
+  const ref = useRef(null);
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert("Image must be under 2MB"); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => onInsert(`\n![image](${ev.target.result})\n`);
+    reader.readAsDataURL(file);
+  };
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFile}/>
+      <button onClick={() => ref.current?.click()} style={{ width:30, height:30, borderRadius:6, border:`1px solid ${T.glassBorder}`, background:"rgba(255,255,255,.04)", color:T.white, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }} title="Insert image">🖼</button>
+    </>
+  );
+};
+
+// Render content including images
+const RichContent = ({ content }) => {
+  if (!content) return null;
+  const parts = content.split(/!\[image\]\((data:image[^)]+)\)/g);
+  return (
+    <span>
+      {parts.map((part, i) => {
+        if (part.startsWith("data:image")) {
+          return <img key={i} src={part} alt="question image" style={{ maxWidth:"100%", borderRadius:8, margin:"8px 0", display:"block" }}/>;
+        }
+        return <RichText key={i} content={part}/>;
+      })}
+    </span>
+  );
+};
+
+// ─── TESTS MANAGER (TUTOR) — with time limit ─────────────────────────────────
+const TestsManager = ({ token, showToast, onMark }) => {
+  const { data:tests, loading, reload } = useDB(token,"tests","?order=created_at.desc");
+  const [showCreate, setShowCreate] = useState(false);
+  const [filterSubject, setFilterSubject] = useState("all");
+  const [form, setForm] = useState({
+    title:"", subject:"Mathematics", due_date:"", attempts_allowed:1,
+    marking_mode:"manual", show_results_immediately:false, time_limit:""
+  });
+  const [saving, setSaving] = useState(false);
+  const filtered = (tests||[]).filter(t => filterSubject==="all" || t.subject===filterSubject);
+
+  const handleCreate = async () => {
+    if (!form.title || !form.due_date) { showToast("Title and due date required","error"); return; }
+    setSaving(true);
+    try {
+      const t = await sb.from(token,"tests");
+      await t.insert({ ...form, status:"draft", time_limit: form.time_limit ? Number(form.time_limit) : null });
+      showToast("Test created","success"); setShowCreate(false);
+      setForm({ title:"", subject:"Mathematics", due_date:"", attempts_allowed:1, marking_mode:"manual", show_results_immediately:false, time_limit:"" });
+      reload();
+    } catch(e) { showToast(e.message,"error"); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    try { const t=await sb.from(token,"tests"); await t.delete(`?id=eq.${id}`); showToast("Deleted","info"); reload(); }
+    catch(e) { showToast(e.message,"error"); }
+  };
+
+  const setStatus = async (id, status) => {
+    try { const t=await sb.from(token,"tests"); await t.update({status},`?id=eq.${id}`); showToast(`Test ${status}`,"success"); reload(); }
+    catch(e) { showToast(e.message,"error"); }
+  };
+
+  return (
+    <div className="animate-in">
+      <div className="section-header">
+        <div><h1 className="display section-title">Tests & Assignments</h1><p className="section-sub">Create, manage and mark assessments</p></div>
+        <button className="btn-primary" onClick={()=>setShowCreate(true)}><Icon name="plus" size={14}/>Create Test</button>
+      </div>
+      <div style={{ display:"flex", gap:8, marginBottom:18 }}>
+        {["all","Mathematics","Physics","Chemistry"].map(f=>(
+          <button key={f} className={`chip-filter ${filterSubject===f?"active":""}`} onClick={()=>setFilterSubject(f)}>{f==="all"?"All":f}</button>
+        ))}
+      </div>
+      {loading ? <div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div> :
+       filtered.length===0 ? <div className="empty-state"><h3>No tests yet</h3><p>Create your first test</p><button className="btn-primary" onClick={()=>setShowCreate(true)}>Create Test</button></div> : (
+        <div className="col">
+          {filtered.map(t=>(
+            <div key={t.id} className="glass" style={{ padding:20, display:"flex", alignItems:"center", gap:14 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:6 }}>
+                  <span style={{ fontWeight:600, fontSize:15 }}>{t.title}</span>
+                  <span className={`badge ${t.status==="active"?"badge-green":t.status==="closed"?"badge-gray":"badge-teal"}`}>{t.status}</span>
+                  <span className="badge badge-orange" style={{ fontSize:10 }}>{t.marking_mode}</span>
+                </div>
+                <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+                  <span className={`tag ${subjectTag(t.subject)}`}>{t.subject}</span>
+                  <span style={{ fontSize:12, color:T.whiteDim }}>Due: {t.due_date}</span>
+                  <span style={{ fontSize:12, color:T.whiteDim }}>{t.attempts_allowed===99?"Unlimited":t.attempts_allowed} attempt{t.attempts_allowed!==1?"s":""}</span>
+                  {t.time_limit && <span style={{ fontSize:12, color:T.accent }}>⏱ {t.time_limit} min</span>}
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                {t.status==="draft"&&<button className="btn-success" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>setStatus(t.id,"active")}><Icon name="check" size={13}/>Publish</button>}
+                {t.status==="active"&&<button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>setStatus(t.id,"closed")}>Close</button>}
+                <button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12, color:T.accent, borderColor:"rgba(255,107,53,.3)" }} onClick={()=>onMark&&onMark(t)}><Icon name="eye" size={13}/>Mark</button>
+                <button className="btn-danger" style={{ padding:"7px 10px" }} onClick={()=>del(t.id)}><Icon name="trash" size={14}/></button>
+              </div>
+            </div>
+          ))}
+        </div>
+       )}
+
+      {showCreate && (
+        <div className="modal-overlay" onClick={()=>setShowCreate(false)}>
+          <div className="modal modal-lg" onClick={e=>e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:22 }}>
+              <h2 className="display" style={{ fontSize:19, fontWeight:600 }}>Create Test</h2>
+              <button onClick={()=>setShowCreate(false)} style={{ background:"none",border:"none",color:T.whiteDim,cursor:"pointer" }}><Icon name="close" size={20}/></button>
+            </div>
+            <div className="col">
+              <div className="input-group"><label>Test Title</label><input placeholder="e.g. Functions & Graphs Test 1" value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
+              <div className="grid-2">
+                <div className="input-group"><label>Subject</label>
+                  <select value={form.subject} onChange={e=>setForm(p=>({...p,subject:e.target.value}))}>
+                    {["Mathematics","Physics","Chemistry"].map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="input-group"><label>Due Date</label><input type="date" value={form.due_date} onChange={e=>setForm(p=>({...p,due_date:e.target.value}))}/></div>
+              </div>
+              <div className="grid-2">
+                <div className="input-group"><label>Attempts Allowed</label>
+                  <select value={form.attempts_allowed} onChange={e=>setForm(p=>({...p,attempts_allowed:Number(e.target.value)}))}>
+                    <option value={1}>1 attempt</option>
+                    <option value={2}>2 attempts</option>
+                    <option value={3}>3 attempts</option>
+                    <option value={99}>Unlimited</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label>Time Limit (minutes, optional)</label>
+                  <input type="number" min="5" max="300" placeholder="e.g. 60 — leave blank for no limit" value={form.time_limit} onChange={e=>setForm(p=>({...p,time_limit:e.target.value}))}/>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="input-group"><label>Marking Mode</label>
+                  <select value={form.marking_mode} onChange={e=>setForm(p=>({...p,marking_mode:e.target.value}))}>
+                    <option value="manual">Manual (I mark it)</option>
+                    <option value="auto">Auto-mark</option>
+                    <option value="mixed">Mixed (both)</option>
+                  </select>
+                </div>
+                {form.marking_mode!=="manual" && (
+                  <div style={{ display:"flex", alignItems:"flex-end", paddingBottom:4 }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:9, textTransform:"none", letterSpacing:0, fontSize:14, fontWeight:400 }}>
+                      <input type="checkbox" style={{ width:"auto" }} checked={form.show_results_immediately} onChange={e=>setForm(p=>({...p,show_results_immediately:e.target.checked}))}/>
+                      Show results immediately
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div style={{ background:T.tealGlow, borderRadius:10, padding:"12px 14px", fontSize:13, color:T.teal, display:"flex", gap:8 }}>
+                <Icon name="info" size={15}/>After creating, go to <strong>Question Bank</strong> to add questions with LaTeX, images and symbols.
+              </div>
+              <div style={{ display:"flex", gap:10 }}>
+                <button className="btn-ghost" onClick={()=>setShowCreate(false)} style={{ flex:1 }}>Cancel</button>
+                <button className="btn-primary" onClick={handleCreate} disabled={saving} style={{ flex:1, justifyContent:"center" }}>{saving?<span className="spinner"/>:"Create Test"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── QUESTION EDITOR MODAL ────────────────────────────────────────────────────
 const QuestionEditor = ({ testId, question, onSave, onClose, showToast }) => {
+  const contentRef = useRef(null);
   const [form, setForm] = useState(question || {
-    type: "mcq", content: "", options: ["", "", "", ""],
-    correct_answer: "", marks: 1, order_index: 0,
+    type:"mcq", content:"", options:["","","",""], correct_answer:"", marks:1, order_index:0,
   });
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const SYMBOLS = {
-    "Math": ["∫", "∑", "∞", "√", "≤", "≥", "≠", "≈", "±", "×", "÷", "π", "θ", "α", "β", "Δ", "λ", "μ", "Ω", "∂"],
-    "Physics": ["⃗", "ω", "τ", "ρ", "σ", "ε", "φ", "Φ", "Ψ", "η", "κ", "γ", "ν", "ξ"],
-    "Chemistry": ["→", "⇌", "↑", "↓", "⁺", "⁻", "°", "₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"],
+    Math:      ["∫","∑","∞","√","≤","≥","≠","≈","±","×","÷","π","θ","α","β","Δ","λ","μ","Ω","∂","⁻¹"],
+    Physics:   ["ω","τ","ρ","σ","ε","φ","Φ","η","κ","γ","ν","→","⇒","∝","⊥","∥"],
+    Chemistry: ["→","⇌","↑","↓","⁺","⁻","°","₀","₁","₂","₃","₄","₅","₆","₇","₈","₉","Δ","⊕"],
   };
 
-  const insertAtCursor = (symbol) => {
-    const ta = document.getElementById("question-content");
-    if (!ta) { setForm(p => ({ ...p, content: p.content + symbol })); return; }
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const newVal = form.content.substring(0, start) + symbol + form.content.substring(end);
-    setForm(p => ({ ...p, content: newVal }));
-    setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + symbol.length; ta.focus(); }, 0);
+  const insertAtCursor = (sym) => {
+    const ta = contentRef.current;
+    if (!ta) { setForm(p=>({...p,content:p.content+sym})); return; }
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const nv = form.content.substring(0,s)+sym+form.content.substring(e);
+    setForm(p=>({...p,content:nv}));
+    setTimeout(()=>{ ta.selectionStart=ta.selectionEnd=s+sym.length; ta.focus(); },0);
   };
 
-  const updateOption = (i, val) => setForm(p => {
-    const opts = [...(p.options || ["","","",""])];
-    opts[i] = val;
-    return { ...p, options: opts };
-  });
+  const insertImage = (imgMarkdown) => setForm(p=>({...p,content:p.content+imgMarkdown}));
 
-  const addOption = () => setForm(p => ({ ...p, options: [...(p.options || []), ""] }));
-  const removeOption = (i) => setForm(p => ({ ...p, options: p.options.filter((_, j) => j !== i) }));
+  const updateOption = (i,val) => setForm(p=>{ const o=[...(p.options||["","","",""])]; o[i]=val; return {...p,options:o}; });
+  const addOption    = () => setForm(p=>({...p,options:[...(p.options||[]),""] }));
+  const removeOption = (i)=> setForm(p=>({...p,options:p.options.filter((_,j)=>j!==i)}));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 740, maxHeight: "95vh" }}>
+      <div className="modal modal-lg" onClick={e=>e.stopPropagation()} style={{ maxWidth:760, maxHeight:"95vh" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <h2 className="display" style={{ fontSize:18, fontWeight:600 }}>{question ? "Edit Question" : "New Question"}</h2>
+          <h2 className="display" style={{ fontSize:18, fontWeight:600 }}>{question?"Edit Question":"New Question"}</h2>
           <div style={{ display:"flex", gap:8 }}>
-            <button className="btn-ghost" style={{ padding:"6px 14px", fontSize:12 }} onClick={() => setPreview(p => !p)}>
-              {preview ? "✏️ Edit" : "👁 Preview"}
-            </button>
-            <button onClick={onClose} style={{ background:"none", border:"none", color:T.whiteDim, cursor:"pointer" }}><Icon name="close" size={20}/></button>
+            <button className="btn-ghost" style={{ padding:"6px 14px",fontSize:12 }} onClick={()=>setPreview(p=>!p)}>{preview?"✏️ Edit":"👁 Preview"}</button>
+            <button onClick={onClose} style={{ background:"none",border:"none",color:T.whiteDim,cursor:"pointer" }}><Icon name="close" size={20}/></button>
           </div>
         </div>
 
         {preview ? (
-          <div style={{ padding:"20px", background:"rgba(255,255,255,.03)", borderRadius:12, border:`1px solid ${T.glassBorder}`, minHeight:200 }}>
-            <div style={{ fontSize:15, lineHeight:1.7, marginBottom:16 }}><RichText content={form.content}/></div>
-            {form.type === "mcq" && (form.options||[]).filter(o=>o).map((opt, i) => (
+          <div style={{ padding:20, background:"rgba(255,255,255,.03)", borderRadius:12, border:`1px solid ${T.glassBorder}`, minHeight:200 }}>
+            <div style={{ fontSize:15, lineHeight:1.8, marginBottom:16 }}><RichContent content={form.content}/></div>
+            {form.type==="mcq" && (form.options||[]).filter(o=>o).map((opt,i)=>(
               <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", marginBottom:8, borderRadius:8, border:`1px solid ${form.correct_answer===String(i)?T.teal:T.glassBorder}`, background:form.correct_answer===String(i)?T.tealGlow:"transparent" }}>
-                <div style={{ width:20, height:20, borderRadius:"50%", border:`2px solid ${form.correct_answer===String(i)?T.teal:T.whiteDim}`, flexShrink:0 }}/>
-                <RichText content={opt}/>
+                <div style={{ width:20,height:20,borderRadius:"50%",border:`2px solid ${form.correct_answer===String(i)?T.teal:T.whiteDim}`,flexShrink:0 }}/>
+                <RichContent content={opt}/>
               </div>
             ))}
-            {form.type === "short" && <div style={{ background:"rgba(255,255,255,.05)", borderRadius:8, padding:"10px 14px", color:T.whiteDim, fontSize:13 }}>Short answer field here</div>}
-            {form.type === "long" && <div style={{ background:"rgba(255,255,255,.05)", borderRadius:8, padding:"10px 14px", color:T.whiteDim, fontSize:13, minHeight:80 }}>Long answer field here</div>}
+            {form.type==="short" && <div style={{ background:"rgba(255,255,255,.05)",borderRadius:8,padding:"10px 14px",color:T.whiteDim,fontSize:13 }}>Short answer field</div>}
+            {form.type==="long"  && <div style={{ background:"rgba(255,255,255,.05)",borderRadius:8,padding:"10px 14px",color:T.whiteDim,fontSize:13,minHeight:80 }}>Long answer field</div>}
           </div>
         ) : (
           <div className="col">
-            {/* Type + Marks row */}
             <div className="grid-2">
-              <div className="input-group">
-                <label>Question Type</label>
-                <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value, correct_answer: "" }))}>
+              <div className="input-group"><label>Question Type</label>
+                <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value,correct_answer:""}))}>
                   <option value="mcq">Multiple Choice (MCQ)</option>
                   <option value="short">Short Answer</option>
                   <option value="long">Long Answer / Essay</option>
                   <option value="true_false">True / False</option>
                 </select>
               </div>
-              <div className="input-group">
-                <label>Marks</label>
-                <input type="number" min="1" max="100" value={form.marks} onChange={e => setForm(p => ({ ...p, marks: Number(e.target.value) }))}/>
+              <div className="input-group"><label>Marks</label>
+                <input type="number" min="1" max="100" value={form.marks} onChange={e=>setForm(p=>({...p,marks:Number(e.target.value)}))}/>
               </div>
             </div>
 
-            {/* Symbol toolbar */}
+            {/* Toolbar */}
             <div>
-              <label>Insert Symbol / Notation</label>
+              <label>Insert Symbol / Image</label>
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {Object.entries(SYMBOLS).map(([cat, syms]) => (
-                  <div key={cat} style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                    <span style={{ fontSize:10, color:T.whiteDim, fontWeight:600, minWidth:58, textTransform:"uppercase", letterSpacing:".5px" }}>{cat}</span>
-                    {syms.map(s => (
-                      <button key={s} onClick={() => insertAtCursor(s)} style={{ width:30, height:30, borderRadius:6, border:`1px solid ${T.glassBorder}`, background:"rgba(255,255,255,.04)", color:T.white, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }} title={s}>{s}</button>
+                {Object.entries(SYMBOLS).map(([cat,syms])=>(
+                  <div key={cat} style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:10,color:T.whiteDim,fontWeight:600,minWidth:56,textTransform:"uppercase",letterSpacing:".5px" }}>{cat}</span>
+                    {syms.map(s=>(
+                      <button key={s} onClick={()=>insertAtCursor(s)} title={s} style={{ width:28,height:28,borderRadius:5,border:`1px solid ${T.glassBorder}`,background:"rgba(255,255,255,.04)",color:T.white,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center" }}>{s}</button>
                     ))}
                   </div>
                 ))}
+                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  <span style={{ fontSize:10,color:T.whiteDim,fontWeight:600,minWidth:56,textTransform:"uppercase",letterSpacing:".5px" }}>Image</span>
+                  <ImageUploader onInsert={insertImage}/>
+                  <span style={{ fontSize:11, color:T.whiteDim }}>Click 🖼 to embed an image into the question</span>
+                </div>
               </div>
-              <div style={{ marginTop:8, padding:"8px 12px", background:"rgba(0,212,200,.06)", borderRadius:8, fontSize:11, color:T.teal }}>
-                💡 Use <strong>$formula$</strong> for inline LaTeX and <strong>$$formula$$</strong> for display LaTeX. Example: <strong>$x^2 + y^2 = r^2$</strong>
+              <div style={{ marginTop:8,padding:"8px 12px",background:"rgba(0,212,200,.06)",borderRadius:8,fontSize:11,color:T.teal }}>
+                💡 Use <strong>$formula$</strong> for inline LaTeX — e.g. <strong>$x^2+y^2=r^2$</strong> &nbsp;|&nbsp; <strong>$$formula$$</strong> for display mode
               </div>
             </div>
 
-            {/* Question content */}
+            {/* Content */}
             <div className="input-group">
               <label>Question Content</label>
-              <textarea id="question-content" rows={4} placeholder="Type your question here. Use $...$ for LaTeX equations, e.g. $\frac{d}{dx}(x^2) = 2x$" value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} style={{ fontFamily:"monospace", fontSize:13 }}/>
+              <textarea ref={contentRef} id="question-content" rows={5}
+                placeholder="Type your question. Use $...$ for LaTeX, click symbols above, or insert an image."
+                value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))}
+                style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13 }}/>
             </div>
 
             {/* MCQ options */}
-            {form.type === "mcq" && (
+            {form.type==="mcq" && (
               <div>
-                <label>Answer Options</label>
+                <label>Answer Options <span style={{ fontSize:11,color:T.whiteDim,fontWeight:400,textTransform:"none",letterSpacing:0 }}>(click letter to mark correct)</span></label>
                 <div className="col" style={{ gap:8, marginTop:6 }}>
-                  {(form.options || ["","","",""]).map((opt, i) => (
+                  {(form.options||["","","",""]).map((opt,i)=>(
                     <div key={i} style={{ display:"flex", gap:8, alignItems:"center" }}>
-                      <button onClick={() => setForm(p => ({ ...p, correct_answer: String(i) }))} style={{ width:28, height:28, borderRadius:"50%", border:`2px solid ${form.correct_answer===String(i)?T.teal:T.glassBorder}`, background:form.correct_answer===String(i)?T.tealGlow:"transparent", cursor:"pointer", flexShrink:0, color:form.correct_answer===String(i)?T.teal:T.whiteDim, fontSize:11, fontWeight:700 }}>{String.fromCharCode(65+i)}</button>
-                      <input placeholder={`Option ${String.fromCharCode(65+i)}`} value={opt} onChange={e => updateOption(i, e.target.value)} style={{ flex:1 }}/>
-                      {(form.options||[]).length > 2 && <button className="btn-danger" style={{ padding:"5px 8px" }} onClick={() => removeOption(i)}><Icon name="trash" size={12}/></button>}
+                      <button onClick={()=>setForm(p=>({...p,correct_answer:String(i)}))} style={{ width:28,height:28,borderRadius:"50%",border:`2px solid ${form.correct_answer===String(i)?T.teal:T.glassBorder}`,background:form.correct_answer===String(i)?T.tealGlow:"transparent",cursor:"pointer",flexShrink:0,color:form.correct_answer===String(i)?T.teal:T.whiteDim,fontSize:11,fontWeight:700 }}>
+                        {String.fromCharCode(65+i)}
+                      </button>
+                      <input placeholder={`Option ${String.fromCharCode(65+i)} — supports LaTeX e.g. $2x+3$`} value={opt} onChange={e=>updateOption(i,e.target.value)} style={{ flex:1 }}/>
+                      {(form.options||[]).length>2 && <button className="btn-danger" style={{ padding:"5px 8px" }} onClick={()=>removeOption(i)}><Icon name="trash" size={12}/></button>}
                     </div>
                   ))}
-                  <button className="btn-ghost" style={{ padding:"6px 14px", fontSize:12, alignSelf:"flex-start" }} onClick={addOption}><Icon name="plus" size={13}/>Add Option</button>
+                  <button className="btn-ghost" style={{ padding:"6px 14px",fontSize:12,alignSelf:"flex-start" }} onClick={addOption}><Icon name="plus" size={13}/>Add Option</button>
                 </div>
               </div>
             )}
 
             {/* True/False */}
-            {form.type === "true_false" && (
+            {form.type==="true_false" && (
               <div>
                 <label>Correct Answer</label>
                 <div style={{ display:"flex", gap:10, marginTop:6 }}>
-                  {["True","False"].map(v => (
-                    <button key={v} onClick={() => setForm(p => ({ ...p, correct_answer: v }))} style={{ flex:1, padding:"10px", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:14, border:`1px solid ${form.correct_answer===v?T.teal:T.glassBorder}`, background:form.correct_answer===v?T.tealGlow:"transparent", color:form.correct_answer===v?T.teal:T.whiteDim }}>{v}</button>
+                  {["True","False"].map(v=>(
+                    <button key={v} onClick={()=>setForm(p=>({...p,correct_answer:v}))} style={{ flex:1,padding:10,borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:14,border:`1px solid ${form.correct_answer===v?T.teal:T.glassBorder}`,background:form.correct_answer===v?T.tealGlow:"transparent",color:form.correct_answer===v?T.teal:T.whiteDim }}>{v}</button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Short answer — model answer */}
-            {form.type === "short" && (
+            {/* Short answer model */}
+            {form.type==="short" && (
               <div className="input-group">
-                <label>Model Answer (for auto-mark reference)</label>
-                <input placeholder="Expected answer..." value={form.correct_answer} onChange={e => setForm(p => ({ ...p, correct_answer: e.target.value }))}/>
-                <span style={{ fontSize:11, color:T.whiteDim, marginTop:4 }}>For manual marking, this is just a reference for you</span>
+                <label>Model Answer (reference for marking)</label>
+                <input placeholder="Expected answer..." value={form.correct_answer} onChange={e=>setForm(p=>({...p,correct_answer:e.target.value}))}/>
               </div>
             )}
           </div>
@@ -1305,14 +1464,14 @@ const QuestionEditor = ({ testId, question, onSave, onClose, showToast }) => {
         <div style={{ display:"flex", gap:10, marginTop:20 }}>
           <button className="btn-ghost" onClick={onClose} style={{ flex:1 }}>Cancel</button>
           <button className="btn-primary" disabled={saving} style={{ flex:1, justifyContent:"center" }}
-            onClick={async () => {
-              if (!form.content.trim()) { showToast("Question content required","error"); return; }
+            onClick={async()=>{
+              if(!form.content.trim()){showToast("Question content required","error");return;}
               setSaving(true);
               try { await onSave(form); onClose(); }
-              catch(e) { showToast(e.message,"error"); }
+              catch(e){ showToast(e.message,"error"); }
               setSaving(false);
             }}>
-            {saving ? <span className="spinner"/> : "Save Question"}
+            {saving?<span className="spinner"/>:"Save Question"}
           </button>
         </div>
       </div>
@@ -1322,237 +1481,205 @@ const QuestionEditor = ({ testId, question, onSave, onClose, showToast }) => {
 
 // ─── QUESTION BANK PAGE ───────────────────────────────────────────────────────
 const QuestionBankPage = ({ token, showToast }) => {
+  const { data:tests }     = useDB(token,"tests","?order=created_at.desc");
+  const [filterTest, setFilterTest]     = useState("all");
   const [filterSubject, setFilterSubject] = useState("all");
-  const [filterTest, setFilterTest] = useState("all");
-  const { data: tests } = useDB(token, "tests", "?order=created_at.desc");
-  const { data: questions, loading, reload } = useDB(token, "questions",
-    filterTest !== "all" ? `?test_id=eq.${filterTest}&order=order_index` : "?order=created_at.desc"
-  , [filterTest]);
+  const { data:questions, loading, reload } = useDB(token,"questions",
+    filterTest!=="all" ? `?test_id=eq.${filterTest}&order=order_index` : "?order=created_at.desc",
+    [filterTest]
+  );
   const [showEditor, setShowEditor] = useState(false);
-  const [editingQ, setEditingQ] = useState(null);
-  const [selectedTest, setSelectedTest] = useState("none");
+  const [editingQ,   setEditingQ]   = useState(null);
+  const [assignTest, setAssignTest] = useState("none");
 
-  const filteredTests = (tests||[]).filter(t => filterSubject==="all" || t.subject===filterSubject);
+  const filteredTests = (tests||[]).filter(t=>filterSubject==="all"||t.subject===filterSubject);
+  const typeLabel = { mcq:"MCQ", short:"Short Answer", long:"Long Answer", true_false:"True/False" };
+  const typeBadge = { mcq:"badge-teal", short:"badge-orange", long:"badge-green", true_false:"badge-gray" };
 
   const handleSave = async (form) => {
-    const testId = filterTest !== "all" ? filterTest : (selectedTest !== "none" ? selectedTest : null);
-    const t = await sb.from(token, "questions");
+    const tid = filterTest!=="all" ? filterTest : (assignTest!=="none" ? assignTest : null);
+    const t = await sb.from(token,"questions");
     if (editingQ?.id) {
-      await t.update({ ...form, test_id: testId }, `?id=eq.${editingQ.id}`);
+      await t.update({...form,test_id:tid},`?id=eq.${editingQ.id}`);
       showToast("Question updated","success");
     } else {
-      await t.insert({ ...form, test_id: testId, order_index: (questions||[]).length });
+      await t.insert({...form,test_id:tid,order_index:(questions||[]).length});
       showToast("Question added","success");
     }
     reload();
   };
 
   const deleteQ = async (id) => {
-    try { const t = await sb.from(token,"questions"); await t.delete(`?id=eq.${id}`); showToast("Deleted","info"); reload(); }
-    catch(e) { showToast(e.message,"error"); }
+    try { const t=await sb.from(token,"questions"); await t.delete(`?id=eq.${id}`); showToast("Deleted","info"); reload(); }
+    catch(e){ showToast(e.message,"error"); }
   };
 
   const moveQ = async (id, dir, idx) => {
-    const qs = [...(questions||[])];
-    const swapIdx = dir === "up" ? idx-1 : idx+1;
-    if (swapIdx < 0 || swapIdx >= qs.length) return;
+    const qs=[...(questions||[])];
+    const si = dir==="up"?idx-1:idx+1;
+    if(si<0||si>=qs.length) return;
     try {
-      const t = await sb.from(token,"questions");
-      await t.update({ order_index: swapIdx }, `?id=eq.${id}`);
-      await t.update({ order_index: idx }, `?id=eq.${qs[swapIdx].id}`);
+      const t=await sb.from(token,"questions");
+      await t.update({order_index:si},`?id=eq.${id}`);
+      await t.update({order_index:idx},`?id=eq.${qs[si].id}`);
       reload();
-    } catch(e) { showToast(e.message,"error"); }
+    } catch(e){ showToast(e.message,"error"); }
   };
-
-  const typeLabel = { mcq:"MCQ", short:"Short Answer", long:"Long Answer", true_false:"True/False" };
-  const typeBadge = { mcq:"badge-teal", short:"badge-orange", long:"badge-green", true_false:"badge-gray" };
 
   return (
     <div className="animate-in">
       <div className="section-header">
-        <div><h1 className="display section-title">Question Bank</h1><p className="section-sub">Create and manage questions for your tests</p></div>
-        <button className="btn-primary" onClick={() => { setEditingQ(null); setShowEditor(true); }}><Icon name="plus" size={14}/>New Question</button>
+        <div><h1 className="display section-title">Question Bank</h1><p className="section-sub">Create questions with LaTeX, chemistry, physics symbols and images</p></div>
+        <button className="btn-primary" onClick={()=>{setEditingQ(null);setShowEditor(true);}}><Icon name="plus" size={14}/>New Question</button>
       </div>
 
-      {/* Filters */}
-      <div style={{ display:"flex", gap:10, marginBottom:18, flexWrap:"wrap" }}>
-        <div style={{ display:"flex", gap:8 }}>
-          {["all","Mathematics","Physics","Chemistry"].map(f => (
-            <button key={f} className={`chip-filter ${filterSubject===f?"active":""}`} onClick={() => { setFilterSubject(f); setFilterTest("all"); }}>{f==="all"?"All Subjects":f}</button>
-          ))}
+      <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+        {["all","Mathematics","Physics","Chemistry"].map(f=>(
+          <button key={f} className={`chip-filter ${filterSubject===f?"active":""}`} onClick={()=>{setFilterSubject(f);setFilterTest("all");}}>{f==="all"?"All Subjects":f}</button>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:12, marginBottom:22, flexWrap:"wrap", alignItems:"center" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, minWidth:240 }}>
+          <label style={{ margin:0,textTransform:"none",letterSpacing:0,fontSize:13,color:T.whiteDim,whiteSpace:"nowrap" }}>Filter by test:</label>
+          <select value={filterTest} onChange={e=>setFilterTest(e.target.value)} style={{ flex:1 }}>
+            <option value="all">All Questions</option>
+            {filteredTests.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
         </div>
-      </div>
-
-      <div style={{ display:"flex", gap:10, marginBottom:20, alignItems:"center" }}>
-        <label style={{ margin:0, textTransform:"none", letterSpacing:0, fontSize:13, color:T.whiteDim, whiteSpace:"nowrap" }}>Filter by test:</label>
-        <select value={filterTest} onChange={e => setFilterTest(e.target.value)} style={{ maxWidth:320 }}>
-          <option value="all">All Questions</option>
-          {filteredTests.map(t => <option key={t.id} value={t.id}>{t.title} ({t.subject})</option>)}
-        </select>
-        {filterTest === "all" && (
-          <>
-            <label style={{ margin:0, textTransform:"none", letterSpacing:0, fontSize:13, color:T.whiteDim, whiteSpace:"nowrap" }}>Assign new to:</label>
-            <select value={selectedTest} onChange={e => setSelectedTest(e.target.value)} style={{ maxWidth:320 }}>
+        {filterTest==="all" && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, minWidth:240 }}>
+            <label style={{ margin:0,textTransform:"none",letterSpacing:0,fontSize:13,color:T.whiteDim,whiteSpace:"nowrap" }}>Assign new to:</label>
+            <select value={assignTest} onChange={e=>setAssignTest(e.target.value)} style={{ flex:1 }}>
               <option value="none">No test (bank only)</option>
-              {(tests||[]).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              {(tests||[]).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
             </select>
-          </>
+          </div>
         )}
       </div>
 
-      {loading ? <div style={{ textAlign:"center", padding:40 }}><span className="spinner"/></div> :
-       (questions||[]).length === 0 ? (
+      {loading ? <div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div> :
+       (questions||[]).length===0 ? (
         <div className="empty-state">
-          <div style={{ fontSize:40, marginBottom:14, opacity:.5 }}><Icon name="bank" size={40}/></div>
+          <div style={{ fontSize:40,marginBottom:14,opacity:.5 }}><Icon name="bank" size={40}/></div>
           <h3>No questions yet</h3>
-          <p>Create your first question with LaTeX, chemistry symbols, physics notation and image support</p>
-          <button className="btn-primary" onClick={() => { setEditingQ(null); setShowEditor(true); }}>Create Question</button>
+          <p>Create questions with LaTeX equations, chemistry symbols, physics notation and embedded images</p>
+          <button className="btn-primary" onClick={()=>{setEditingQ(null);setShowEditor(true);}}>Create First Question</button>
         </div>
        ) : (
         <div className="col">
-          {questions.map((q, idx) => (
+          {questions.map((q,idx)=>(
             <div key={q.id} className="glass" style={{ padding:20 }}>
               <div style={{ display:"flex", alignItems:"flex-start", gap:14 }}>
                 <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
-                  <button onClick={() => moveQ(q.id,"up",idx)} disabled={idx===0} style={{ background:"none", border:`1px solid ${T.glassBorder}`, borderRadius:6, color:T.whiteDim, cursor:"pointer", padding:"3px 8px", fontSize:12 }}>▲</button>
-                  <div style={{ textAlign:"center", fontSize:12, color:T.whiteDim, fontWeight:600 }}>{idx+1}</div>
-                  <button onClick={() => moveQ(q.id,"down",idx)} disabled={idx===(questions||[]).length-1} style={{ background:"none", border:`1px solid ${T.glassBorder}`, borderRadius:6, color:T.whiteDim, cursor:"pointer", padding:"3px 8px", fontSize:12 }}>▼</button>
+                  <button onClick={()=>moveQ(q.id,"up",idx)} disabled={idx===0} style={{ background:"none",border:`1px solid ${T.glassBorder}`,borderRadius:5,color:T.whiteDim,cursor:"pointer",padding:"2px 7px",fontSize:11 }}>▲</button>
+                  <div style={{ textAlign:"center",fontSize:12,color:T.whiteDim,fontWeight:600 }}>{idx+1}</div>
+                  <button onClick={()=>moveQ(q.id,"down",idx)} disabled={idx===(questions||[]).length-1} style={{ background:"none",border:`1px solid ${T.glassBorder}`,borderRadius:5,color:T.whiteDim,cursor:"pointer",padding:"2px 7px",fontSize:11 }}>▼</button>
                 </div>
                 <div style={{ flex:1 }}>
-                  <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap", alignItems:"center" }}>
+                  <div style={{ display:"flex", gap:7, marginBottom:8, flexWrap:"wrap", alignItems:"center" }}>
                     <span className={`badge ${typeBadge[q.type]||"badge-gray"}`}>{typeLabel[q.type]||q.type}</span>
                     <span className="badge badge-teal">{q.marks} mark{q.marks!==1?"s":""}</span>
                   </div>
-                  <div style={{ fontSize:14, lineHeight:1.6 }}><RichText content={q.content}/></div>
-                  {q.type === "mcq" && (q.options||[]).filter(o=>o).length > 0 && (
-                    <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:5 }}>
-                      {(q.options||[]).filter(o=>o).map((opt, i) => (
-                        <div key={i} style={{ display:"flex", gap:8, alignItems:"center", fontSize:13 }}>
-                          <span style={{ color: q.correct_answer===String(i)?T.success:T.whiteDim, fontWeight:600, minWidth:20 }}>{q.correct_answer===String(i)?"✓":String.fromCharCode(65+i)}</span>
-                          <span style={{ color: q.correct_answer===String(i)?T.success:T.whiteDim }}><RichText content={opt}/></span>
-                        </div>
-                      ))}
+                  <div style={{ fontSize:14, lineHeight:1.7 }}><RichContent content={q.content}/></div>
+                  {q.type==="mcq" && (q.options||[]).filter(o=>o).map((opt,i)=>(
+                    <div key={i} style={{ display:"flex", gap:8, alignItems:"center", fontSize:13, marginTop:6 }}>
+                      <span style={{ color:q.correct_answer===String(i)?T.success:T.whiteDim, fontWeight:600, minWidth:20 }}>{q.correct_answer===String(i)?"✓":String.fromCharCode(65+i)}</span>
+                      <span style={{ color:q.correct_answer===String(i)?T.success:T.whiteDim }}><RichContent content={opt}/></span>
                     </div>
-                  )}
-                  {q.type === "true_false" && q.correct_answer && (
-                    <div style={{ marginTop:8, fontSize:13, color:T.success }}>✓ Answer: {q.correct_answer}</div>
-                  )}
-                  {q.type === "short" && q.correct_answer && (
-                    <div style={{ marginTop:8, fontSize:13, color:T.whiteDim }}>Model answer: {q.correct_answer}</div>
-                  )}
+                  ))}
+                  {q.type==="true_false" && q.correct_answer && <div style={{ marginTop:8,fontSize:13,color:T.success }}>✓ Answer: {q.correct_answer}</div>}
+                  {q.type==="short" && q.correct_answer && <div style={{ marginTop:8,fontSize:13,color:T.whiteDim }}>Model: {q.correct_answer}</div>}
                 </div>
-                <div style={{ display:"flex", gap:7, flexShrink:0 }}>
-                  <button className="btn-ghost" style={{ padding:"6px 11px", fontSize:12 }} onClick={() => { setEditingQ(q); setShowEditor(true); }}><Icon name="edit" size={13}/></button>
-                  <button className="btn-danger" style={{ padding:"6px 10px" }} onClick={() => deleteQ(q.id)}><Icon name="trash" size={13}/></button>
+                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  <button className="btn-ghost" style={{ padding:"6px 11px",fontSize:12 }} onClick={()=>{setEditingQ(q);setShowEditor(true);}}><Icon name="edit" size={13}/></button>
+                  <button className="btn-danger" style={{ padding:"6px 10px" }} onClick={()=>deleteQ(q.id)}><Icon name="trash" size={13}/></button>
                 </div>
               </div>
             </div>
           ))}
         </div>
        )}
-
-      {showEditor && (
-        <QuestionEditor
-          testId={filterTest !== "all" ? filterTest : (selectedTest !== "none" ? selectedTest : null)}
-          question={editingQ}
-          onSave={handleSave}
-          onClose={() => { setShowEditor(false); setEditingQ(null); }}
-          showToast={showToast}
-        />
-      )}
+      {showEditor && <QuestionEditor testId={filterTest!=="all"?filterTest:(assignTest!=="none"?assignTest:null)} question={editingQ} onSave={handleSave} onClose={()=>{setShowEditor(false);setEditingQ(null);}} showToast={showToast}/>}
     </div>
   );
 };
 
-// ─── STUDENT TEST TAKING ──────────────────────────────────────────────────────
+// ─── STUDENT TEST TAKER ───────────────────────────────────────────────────────
 const TestTaker = ({ test, token, userEmail, onFinish }) => {
-  const { data: questions, loading } = useDB(token, "questions", `?test_id=eq.${test.id}&order=order_index`);
-  const [answers, setAnswers] = useState({});
+  const { data:questions, loading } = useDB(token,"questions",`?test_id=eq.${test.id}&order=order_index`);
+  const [answers,  setAnswers]  = useState({});
   const [currentQ, setCurrentQ] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [result, setResult] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(test.time_limit ? test.time_limit * 60 : null);
+  const [submitted,  setSubmitted]  = useState(false);
+  const [result,     setResult]     = useState(null);
+  const [timeLeft,   setTimeLeft]   = useState(test.time_limit ? test.time_limit*60 : null);
 
-  // Timer
-  useEffect(() => {
-    if (!timeLeft) return;
-    const t = setInterval(() => setTimeLeft(p => { if (p <= 1) { clearInterval(t); handleSubmit(); return 0; } return p - 1; }), 1000);
-    return () => clearInterval(t);
-  }, []);
+  useEffect(()=>{
+    if(!timeLeft) return;
+    const t=setInterval(()=>setTimeLeft(p=>{ if(p<=1){clearInterval(t);handleSubmit();return 0;} return p-1; }),1000);
+    return ()=>clearInterval(t);
+  },[]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    const qs = questions || [];
-    let score = null;
-    let autoScore = 0;
-    let totalAutoMarks = 0;
-
-    if (test.marking_mode === "auto" || test.marking_mode === "mixed") {
-      qs.forEach(q => {
-        if (q.type === "mcq" || q.type === "true_false") {
-          totalAutoMarks += q.marks;
-          if (answers[q.id] === q.correct_answer) autoScore += q.marks;
+    const qs = questions||[];
+    const totalMarks = qs.reduce((s,q)=>s+(q.marks||1),0);
+    let autoScore=0, autoMarks=0;
+    if(test.marking_mode==="auto"||test.marking_mode==="mixed"){
+      qs.forEach(q=>{
+        if(q.type==="mcq"||q.type==="true_false"){
+          autoMarks+=q.marks||1;
+          if(answers[q.id]===q.correct_answer) autoScore+=q.marks||1;
         }
       });
-      const totalMarks = qs.reduce((s, q) => s + (q.marks||1), 0);
-      score = totalAutoMarks > 0 ? Math.round((autoScore / totalMarks) * 100) : null;
     }
-
+    const score = (test.marking_mode==="auto"||test.marking_mode==="mixed") && autoMarks>0
+      ? Math.round((autoScore/totalMarks)*100) : null;
     try {
-      const t = await sb.from(token, "submissions");
-      await t.insert({
-        test_id: test.id,
-        student_email: userEmail,
-        answers: answers,
-        score: score,
-        status: test.marking_mode === "manual" ? "submitted" : "marked",
-        attempt_number: 1,
-      });
-      setResult({ score, autoScore, totalAutoMarks, questions: qs });
+      const t=await sb.from(token,"submissions");
+      await t.insert({ test_id:test.id, student_email:userEmail, answers, score, status:test.marking_mode==="manual"?"submitted":"marked", attempt_number:1 });
+      setResult({ score, questions:qs, answers });
       setSubmitted(true);
-    } catch(e) { console.error(e); }
+    } catch(e){ console.error(e); }
     setSubmitting(false);
   };
 
-  const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
-  const totalMarks = (questions||[]).reduce((s,q) => s+(q.marks||1), 0);
-  const answeredCount = Object.keys(answers).length;
+  const fmt = s=>`${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+  const qs = questions||[];
+  const totalMarks = qs.reduce((s,q)=>s+(q.marks||1),0);
 
-  if (loading) return <div style={{ textAlign:"center", padding:60 }}><span className="spinner"/></div>;
+  if(loading) return <div style={{ textAlign:"center",padding:60 }}><span className="spinner"/></div>;
 
-  if (submitted) {
-    const showScore = test.marking_mode !== "manual" && test.show_results_immediately;
+  if(submitted){
+    const showScore = (test.marking_mode==="auto"||test.marking_mode==="mixed") && test.show_results_immediately;
     return (
-      <div className="animate-in" style={{ maxWidth:600, margin:"0 auto", padding:"48px 24px", textAlign:"center" }}>
-        <div style={{ fontSize:60, marginBottom:16 }}>🎉</div>
-        <h2 className="display" style={{ fontSize:26, fontWeight:700, marginBottom:8 }}>Test Submitted!</h2>
-        <p style={{ color:T.whiteDim, marginBottom:32 }}>Your answers have been recorded successfully.</p>
-        {showScore && result?.score !== null && (
-          <div className="glass" style={{ padding:32, marginBottom:28 }}>
-            <div style={{ fontSize:60, fontWeight:700, color: result.score>=75?T.success:result.score>=50?T.warning:T.danger, marginBottom:8 }}>{result.score}%</div>
-            <div style={{ fontSize:14, color:T.whiteDim }}>Your Score</div>
-            <div className="progress-bar" style={{ marginTop:16 }}>
-              <div className="progress-fill" style={{ width:`${result.score}%`, background:`linear-gradient(90deg,${result.score>=75?T.success:result.score>=50?T.warning:T.danger},${result.score>=75?T.success:result.score>=50?T.warning:T.danger}99)` }}/>
-            </div>
-            {/* Show correct/incorrect per MCQ */}
-            {result.questions && (
-              <div style={{ marginTop:24, textAlign:"left" }}>
-                {result.questions.filter(q=>q.type==="mcq"||q.type==="true_false").map(q => (
-                  <div key={q.id} style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:10, padding:"10px 14px", borderRadius:8, background: answers[q.id]===q.correct_answer?"rgba(34,197,94,.08)":"rgba(239,68,68,.08)", border:`1px solid ${answers[q.id]===q.correct_answer?"rgba(34,197,94,.3)":"rgba(239,68,68,.3)"}` }}>
-                    <span style={{ color:answers[q.id]===q.correct_answer?T.success:T.danger, fontWeight:700, fontSize:16, flexShrink:0 }}>{answers[q.id]===q.correct_answer?"✓":"✕"}</span>
-                    <div style={{ fontSize:13, flex:1 }}><RichText content={q.content}/></div>
-                  </div>
-                ))}
+      <div className="animate-in" style={{ maxWidth:640,margin:"0 auto",padding:"48px 24px",textAlign:"center" }}>
+        <div style={{ fontSize:60,marginBottom:16 }}>🎉</div>
+        <h2 className="display" style={{ fontSize:26,fontWeight:700,marginBottom:8 }}>Test Submitted!</h2>
+        <p style={{ color:T.whiteDim,marginBottom:32 }}>Your answers have been recorded successfully.</p>
+        {showScore && result?.score!==null && (
+          <div className="glass" style={{ padding:32,marginBottom:28 }}>
+            <div style={{ fontSize:60,fontWeight:700,color:result.score>=75?T.success:result.score>=50?T.warning:T.danger,marginBottom:8 }}>{result.score}%</div>
+            <div style={{ fontSize:14,color:T.whiteDim,marginBottom:16 }}>Your Score</div>
+            <div className="progress-bar"><div className="progress-fill" style={{ width:`${result.score}%`,background:`linear-gradient(90deg,${result.score>=75?T.success:result.score>=50?T.warning:T.danger},${result.score>=75?T.success:result.score>=50?T.warning:T.danger}99)` }}/></div>
+            {result.questions.filter(q=>q.type==="mcq"||q.type==="true_false").length>0 && (
+              <div style={{ marginTop:24,textAlign:"left" }}>
+                {result.questions.filter(q=>q.type==="mcq"||q.type==="true_false").map(q=>{
+                  const correct = result.answers[q.id]===q.correct_answer;
+                  return (
+                    <div key={q.id} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:8,padding:"10px 14px",borderRadius:8,background:correct?"rgba(34,197,94,.08)":"rgba(239,68,68,.08)",border:`1px solid ${correct?"rgba(34,197,94,.3)":"rgba(239,68,68,.3)"}`}}>
+                      <span style={{ color:correct?T.success:T.danger,fontWeight:700,fontSize:16,flexShrink:0 }}>{correct?"✓":"✕"}</span>
+                      <div style={{ fontSize:13,flex:1 }}><RichContent content={q.content}/></div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
         {!showScore && (
-          <div className="glass" style={{ padding:20, marginBottom:28 }}>
-            <p style={{ color:T.whiteDim, fontSize:14 }}>
-              {test.marking_mode === "manual" ? "Your tutor will mark your test and release results soon." : "Results will be released by your tutor."}
-            </p>
+          <div className="glass" style={{ padding:20,marginBottom:28 }}>
+            <p style={{ color:T.whiteDim,fontSize:14 }}>{test.marking_mode==="manual"?"Your tutor will mark your test and release results soon.":"Results will be released by your tutor."}</p>
           </div>
         )}
         <button className="btn-primary" onClick={onFinish}>Back to Tests</button>
@@ -1560,101 +1687,79 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
     );
   }
 
-  const q = (questions||[])[currentQ];
-  if (!q) return null;
+  const q = qs[currentQ];
+  if(!q) return null;
 
   return (
-    <div style={{ maxWidth:760, margin:"0 auto", padding:"0 24px 48px" }}>
-      {/* Test header */}
-      <div style={{ position:"sticky", top:0, background:T.navy, padding:"16px 0", borderBottom:`1px solid ${T.glassBorder}`, marginBottom:24, zIndex:10 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+    <div style={{ maxWidth:760,margin:"0 auto",padding:"0 24px 60px" }}>
+      {/* Sticky header */}
+      <div style={{ position:"sticky",top:0,background:T.navy,padding:"14px 0",borderBottom:`1px solid ${T.glassBorder}`,marginBottom:24,zIndex:10 }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div>
-            <div style={{ fontWeight:600, fontSize:15 }}>{test.title}</div>
-            <div style={{ fontSize:12, color:T.whiteDim, marginTop:2 }}>
-              Question {currentQ+1} of {(questions||[]).length} · {answeredCount} answered · {totalMarks} marks total
-            </div>
+            <div style={{ fontWeight:600,fontSize:15 }}>{test.title}</div>
+            <div style={{ fontSize:12,color:T.whiteDim,marginTop:2 }}>Q{currentQ+1}/{qs.length} · {Object.keys(answers).length} answered · {totalMarks} marks</div>
           </div>
-          <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-            {timeLeft !== null && (
-              <div style={{ fontFamily:"monospace", fontSize:16, fontWeight:700, color: timeLeft < 300 ? T.danger : T.teal, background:"rgba(0,0,0,.3)", padding:"6px 14px", borderRadius:8 }}>
-                ⏱ {formatTime(timeLeft)}
-              </div>
+          <div style={{ display:"flex",gap:12,alignItems:"center" }}>
+            {timeLeft!==null && (
+              <div style={{ fontFamily:"monospace",fontSize:16,fontWeight:700,color:timeLeft<300?T.danger:T.teal,background:"rgba(0,0,0,.3)",padding:"5px 12px",borderRadius:8 }}>⏱ {fmt(timeLeft)}</div>
             )}
             <button className="btn-primary" onClick={handleSubmit} disabled={submitting} style={{ padding:"8px 18px" }}>
-              {submitting ? <span className="spinner"/> : "Submit Test"}
+              {submitting?<span className="spinner"/>:"Submit Test"}
             </button>
           </div>
         </div>
-        {/* Progress bar */}
-        <div className="progress-bar" style={{ marginTop:12 }}>
-          <div className="progress-fill" style={{ width:`${((currentQ+1)/(questions||[]).length)*100}%` }}/>
+        <div className="progress-bar" style={{ marginTop:10 }}>
+          <div className="progress-fill" style={{ width:`${((currentQ+1)/qs.length)*100}%` }}/>
         </div>
       </div>
 
       {/* Question */}
-      <div className="glass" style={{ padding:28, marginBottom:20 }}>
-        <div style={{ display:"flex", gap:10, marginBottom:16, alignItems:"center" }}>
-          <span style={{ width:32, height:32, borderRadius:"50%", background:T.tealGlow, border:`1px solid ${T.teal}`, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:13, color:T.teal, flexShrink:0 }}>{currentQ+1}</span>
-          <div style={{ display:"flex", gap:8 }}>
-            <span className="badge badge-teal">{q.marks} mark{q.marks!==1?"s":""}</span>
-            {answers[q.id] !== undefined && <span className="badge badge-green">✓ Answered</span>}
-          </div>
+      <div className="glass" style={{ padding:28,marginBottom:20 }}>
+        <div style={{ display:"flex",gap:10,marginBottom:16,alignItems:"center" }}>
+          <span style={{ width:32,height:32,borderRadius:"50%",background:T.tealGlow,border:`1px solid ${T.teal}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:T.teal,flexShrink:0 }}>{currentQ+1}</span>
+          <span className="badge badge-teal">{q.marks} mark{q.marks!==1?"s":""}</span>
+          {answers[q.id]!==undefined && <span className="badge badge-green">✓ Answered</span>}
         </div>
-        <div style={{ fontSize:16, lineHeight:1.75, marginBottom:24 }}><RichText content={q.content}/></div>
+        <div style={{ fontSize:16,lineHeight:1.8,marginBottom:24 }}><RichContent content={q.content}/></div>
 
-        {/* MCQ options */}
-        {q.type === "mcq" && (
+        {q.type==="mcq" && (
           <div className="col" style={{ gap:10 }}>
-            {(q.options||[]).filter(o=>o).map((opt, i) => (
-              <div key={i} onClick={() => setAnswers(p => ({ ...p, [q.id]: String(i) }))}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 18px", borderRadius:10, cursor:"pointer", transition:"all .2s",
-                  border:`1px solid ${answers[q.id]===String(i)?T.teal:T.glassBorder}`,
-                  background:answers[q.id]===String(i)?T.tealGlow:"rgba(255,255,255,.02)" }}>
-                <div style={{ width:22, height:22, borderRadius:"50%", border:`2px solid ${answers[q.id]===String(i)?T.teal:T.whiteDim}`, background:answers[q.id]===String(i)?T.teal:"transparent", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {answers[q.id]===String(i) && <div style={{ width:8, height:8, borderRadius:"50%", background:T.navy }}/>}
+            {(q.options||[]).filter(o=>o).map((opt,i)=>(
+              <div key={i} onClick={()=>setAnswers(p=>({...p,[q.id]:String(i)}))}
+                style={{ display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderRadius:10,cursor:"pointer",transition:"all .2s",border:`1px solid ${answers[q.id]===String(i)?T.teal:T.glassBorder}`,background:answers[q.id]===String(i)?T.tealGlow:"rgba(255,255,255,.02)" }}>
+                <div style={{ width:22,height:22,borderRadius:"50%",border:`2px solid ${answers[q.id]===String(i)?T.teal:T.whiteDim}`,background:answers[q.id]===String(i)?T.teal:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                  {answers[q.id]===String(i)&&<div style={{ width:8,height:8,borderRadius:"50%",background:T.navy }}/>}
                 </div>
-                <span style={{ color:answers[q.id]===String(i)?T.white:T.whiteDim, fontWeight:answers[q.id]===String(i)?500:400 }}><RichText content={opt}/></span>
+                <span style={{ color:answers[q.id]===String(i)?T.white:T.whiteDim }}><RichContent content={opt}/></span>
               </div>
             ))}
           </div>
         )}
 
-        {/* True/False */}
-        {q.type === "true_false" && (
-          <div style={{ display:"flex", gap:12 }}>
-            {["True","False"].map(v => (
-              <div key={v} onClick={() => setAnswers(p => ({ ...p, [q.id]: v }))}
-                style={{ flex:1, padding:"16px", borderRadius:10, cursor:"pointer", textAlign:"center", fontWeight:600, fontSize:15, transition:"all .2s",
-                  border:`1px solid ${answers[q.id]===v?T.teal:T.glassBorder}`,
-                  background:answers[q.id]===v?T.tealGlow:"rgba(255,255,255,.02)",
-                  color:answers[q.id]===v?T.teal:T.whiteDim }}>
+        {q.type==="true_false" && (
+          <div style={{ display:"flex",gap:12 }}>
+            {["True","False"].map(v=>(
+              <div key={v} onClick={()=>setAnswers(p=>({...p,[q.id]:v}))}
+                style={{ flex:1,padding:16,borderRadius:10,cursor:"pointer",textAlign:"center",fontWeight:600,fontSize:15,transition:"all .2s",border:`1px solid ${answers[q.id]===v?T.teal:T.glassBorder}`,background:answers[q.id]===v?T.tealGlow:"rgba(255,255,255,.02)",color:answers[q.id]===v?T.teal:T.whiteDim }}>
                 {v}
               </div>
             ))}
           </div>
         )}
 
-        {/* Short answer */}
-        {q.type === "short" && (
-          <input placeholder="Type your answer here..." value={answers[q.id]||""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize:15 }}/>
-        )}
-
-        {/* Long answer */}
-        {q.type === "long" && (
-          <textarea rows={8} placeholder="Write your answer here..." value={answers[q.id]||""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize:15, lineHeight:1.7, resize:"vertical" }}/>
-        )}
+        {q.type==="short" && <input placeholder="Type your answer here..." value={answers[q.id]||""} onChange={e=>setAnswers(p=>({...p,[q.id]:e.target.value}))} style={{ fontSize:15 }}/>}
+        {q.type==="long"  && <textarea rows={8} placeholder="Write your full answer here..." value={answers[q.id]||""} onChange={e=>setAnswers(p=>({...p,[q.id]:e.target.value}))} style={{ fontSize:15,lineHeight:1.7,resize:"vertical" }}/>}
       </div>
 
       {/* Navigation */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <button className="btn-ghost" onClick={() => setCurrentQ(p => Math.max(0, p-1))} disabled={currentQ===0}>← Previous</button>
-        {/* Question dots */}
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center", maxWidth:400 }}>
-          {(questions||[]).map((_, i) => (
-            <button key={i} onClick={() => setCurrentQ(i)} style={{ width:32, height:32, borderRadius:8, border:`1px solid ${i===currentQ?T.teal:answers[_?.id]!==undefined?T.success:T.glassBorder}`, background:i===currentQ?T.tealGlow:answers[_?.id]!==undefined?"rgba(34,197,94,.12)":"transparent", color:i===currentQ?T.teal:answers[_?.id]!==undefined?T.success:T.whiteDim, cursor:"pointer", fontSize:12, fontWeight:600 }}>{i+1}</button>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+        <button className="btn-ghost" onClick={()=>setCurrentQ(p=>Math.max(0,p-1))} disabled={currentQ===0}>← Previous</button>
+        <div style={{ display:"flex",gap:5,flexWrap:"wrap",justifyContent:"center",maxWidth:420 }}>
+          {qs.map((qi,i)=>(
+            <button key={i} onClick={()=>setCurrentQ(i)} style={{ width:32,height:32,borderRadius:7,border:`1px solid ${i===currentQ?T.teal:answers[qi.id]!==undefined?T.success:T.glassBorder}`,background:i===currentQ?T.tealGlow:answers[qi.id]!==undefined?"rgba(34,197,94,.12)":"transparent",color:i===currentQ?T.teal:answers[qi.id]!==undefined?T.success:T.whiteDim,cursor:"pointer",fontSize:12,fontWeight:600 }}>{i+1}</button>
           ))}
         </div>
-        <button className="btn-primary" onClick={() => setCurrentQ(p => Math.min((questions||[]).length-1, p+1))} disabled={currentQ===(questions||[]).length-1}>Next →</button>
+        <button className="btn-primary" onClick={()=>setCurrentQ(p=>Math.min(qs.length-1,p+1))} disabled={currentQ===qs.length-1}>Next →</button>
       </div>
     </div>
   );
@@ -1662,131 +1767,130 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
 
 // ─── MARKING INTERFACE ────────────────────────────────────────────────────────
 const MarkingInterface = ({ test, token, showToast, onClose }) => {
-  const { data: submissions, loading, reload } = useDB(token, "submissions", `?test_id=eq.${test.id}&order=submitted_at`);
-  const { data: questions } = useDB(token, "questions", `?test_id=eq.${test.id}&order=order_index`);
-  const [selected, setSelected] = useState(null);
-  const [marks, setMarks] = useState({});
-  const [feedback, setFeedback] = useState("");
-  const [saving, setSaving] = useState(false);
+  const { data:submissions, loading, reload } = useDB(token,"submissions",`?test_id=eq.${test.id}&order=submitted_at`);
+  const { data:questions } = useDB(token,"questions",`?test_id=eq.${test.id}&order=order_index`);
+  const [selected,  setSelected]  = useState(null);
+  const [qMarks,    setQMarks]    = useState({});
+  const [feedback,  setFeedback]  = useState("");
+  const [saving,    setSaving]    = useState(false);
 
-  useEffect(() => {
-    if (selected) {
-      const existingMarks = {};
-      (questions||[]).forEach(q => {
-        if (selected.answers?.[q.id] !== undefined) existingMarks[q.id] = "";
-      });
-      setMarks(existingMarks);
-      setFeedback(selected.feedback || "");
-    }
-  }, [selected, questions]);
-
-  const totalMarks = (questions||[]).reduce((s,q) => s+(q.marks||1), 0);
+  const totalMarks = (questions||[]).reduce((s,q)=>s+(q.marks||1),0);
 
   const handleSaveMark = async () => {
+    const awarded = (questions||[]).reduce((s,q)=>{
+      if(q.type==="mcq"||q.type==="true_false"){
+        return s+(selected.answers?.[q.id]===q.correct_answer?(q.marks||1):0);
+      }
+      return s+(Number(qMarks[q.id])||0);
+    },0);
+    const score = Math.round((awarded/totalMarks)*100);
     setSaving(true);
-    const totalAwarded = Object.values(marks).reduce((s, v) => s + (Number(v)||0), 0);
-    const score = Math.round((totalAwarded / totalMarks) * 100);
     try {
-      const t = await sb.from(token, "submissions");
-      await t.update({ score, feedback, status:"marked", question_marks: marks }, `?id=eq.${selected.id}`);
-      showToast(`Marked: ${score}%`, "success");
-      reload();
-      setSelected(null);
-    } catch(e) { showToast(e.message,"error"); }
+      const t=await sb.from(token,"submissions");
+      await t.update({score,feedback,status:"marked",question_marks:qMarks},`?id=eq.${selected.id}`);
+      showToast(`Marked: ${score}%`,"success"); reload(); setSelected(null);
+    } catch(e){ showToast(e.message,"error"); }
     setSaving(false);
   };
 
-  const releaseResults = async (subId) => {
+  const releaseAll = async () => {
     try {
-      const t = await sb.from(token,"submissions");
-      await t.update({ status:"released" }, `?id=eq.${subId}`);
-      showToast("Results released to student","success");
-      reload();
-    } catch(e) { showToast(e.message,"error"); }
+      const t=await sb.from(token,"submissions");
+      await t.update({status:"released"},`?test_id=eq.${test.id}&status=eq.marked`);
+      showToast("All results released","success"); reload();
+    } catch(e){ showToast(e.message,"error"); }
   };
 
+  const releaseOne = async (id) => {
+    try {
+      const t=await sb.from(token,"submissions");
+      await t.update({status:"released"},`?id=eq.${id}`);
+      showToast("Released","success"); reload();
+    } catch(e){ showToast(e.message,"error"); }
+  };
+
+  const markedCount = (submissions||[]).filter(s=>s.status==="marked"||s.status==="released").length;
+
   return (
-    <div style={{ position:"fixed", inset:0, background:T.navy, zIndex:500, overflowY:"auto" }}>
-      <div style={{ maxWidth:900, margin:"0 auto", padding:"24px" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
-          <button className="btn-ghost" onClick={onClose} style={{ padding:"8px 14px", fontSize:13 }}>← Back</button>
-          <div>
-            <h1 className="display" style={{ fontSize:22, fontWeight:700 }}>Marking: {test.title}</h1>
-            <p style={{ color:T.whiteDim, fontSize:13 }}>{(submissions||[]).length} submissions · {(submissions||[]).filter(s=>s.status==="marked"||s.status==="released").length} marked</p>
+    <div style={{ position:"fixed",inset:0,background:T.navy,zIndex:500,overflowY:"auto" }}>
+      <div style={{ maxWidth:920,margin:"0 auto",padding:28 }}>
+        <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:28 }}>
+          <button className="btn-ghost" onClick={onClose} style={{ padding:"8px 14px",fontSize:13 }}>← Back</button>
+          <div style={{ flex:1 }}>
+            <h1 className="display" style={{ fontSize:22,fontWeight:700 }}>Marking: {test.title}</h1>
+            <p style={{ color:T.whiteDim,fontSize:13 }}>{(submissions||[]).length} submissions · {markedCount} marked</p>
           </div>
+          {(submissions||[]).some(s=>s.status==="marked") && (
+            <button className="btn-success" onClick={releaseAll}>Release All Results</button>
+          )}
         </div>
 
         {selected ? (
           <div className="animate-in">
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
               <h2 className="display" style={{ fontSize:18 }}>Marking: {selected.student_email}</h2>
-              <button className="btn-ghost" onClick={() => setSelected(null)}>← All Submissions</button>
+              <button className="btn-ghost" onClick={()=>setSelected(null)}>← All Submissions</button>
             </div>
             <div className="col">
-              {(questions||[]).map((q, i) => {
-                const studentAnswer = selected.answers?.[q.id];
-                const isAutoMarkable = q.type==="mcq"||q.type==="true_false";
-                const isCorrect = isAutoMarkable && studentAnswer === q.correct_answer;
+              {(questions||[]).map((q,i)=>{
+                const ans = selected.answers?.[q.id];
+                const isAuto = q.type==="mcq"||q.type==="true_false";
+                const correct = isAuto && ans===q.correct_answer;
                 return (
                   <div key={q.id} className="glass" style={{ padding:22 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:12 }}>
-                      <div style={{ fontWeight:600, fontSize:14 }}>Q{i+1} <span style={{ fontWeight:400, color:T.whiteDim }}>({q.marks} mark{q.marks!==1?"s":""})</span></div>
-                      {isAutoMarkable && <span style={{ color:isCorrect?T.success:T.danger, fontWeight:600, fontSize:13 }}>{isCorrect?"✓ Correct":"✕ Incorrect"}</span>}
+                    <div style={{ display:"flex",justifyContent:"space-between",marginBottom:12 }}>
+                      <div style={{ fontWeight:600,fontSize:14 }}>Q{i+1} <span style={{ fontWeight:400,color:T.whiteDim }}>({q.marks||1} mark{(q.marks||1)!==1?"s":""})</span></div>
+                      {isAuto && <span style={{ color:correct?T.success:T.danger,fontWeight:600,fontSize:13 }}>{correct?"✓ Correct":"✕ Incorrect"}</span>}
                     </div>
-                    <div style={{ fontSize:14, marginBottom:12, lineHeight:1.6 }}><RichText content={q.content}/></div>
-                    <div style={{ padding:"10px 14px", background:"rgba(255,255,255,.04)", borderRadius:8, marginBottom:12 }}>
-                      <div style={{ fontSize:11, color:T.whiteDim, marginBottom:4 }}>STUDENT'S ANSWER</div>
-                      <div style={{ fontSize:14 }}>{studentAnswer !== undefined ? <RichText content={String(studentAnswer)}/> : <span style={{ color:T.whiteDim }}>No answer provided</span>}</div>
+                    <div style={{ fontSize:14,marginBottom:12,lineHeight:1.7 }}><RichContent content={q.content}/></div>
+                    <div style={{ padding:"10px 14px",background:"rgba(255,255,255,.04)",borderRadius:8,marginBottom:10 }}>
+                      <div style={{ fontSize:11,color:T.whiteDim,marginBottom:4 }}>STUDENT'S ANSWER</div>
+                      <div style={{ fontSize:14 }}>{ans!==undefined?<RichContent content={String(ans)}/>:<span style={{ color:T.whiteDim }}>No answer</span>}</div>
                     </div>
                     {(q.type==="short"||q.type==="long") && q.correct_answer && (
-                      <div style={{ padding:"10px 14px", background:"rgba(34,197,94,.06)", borderRadius:8, marginBottom:12, border:"1px solid rgba(34,197,94,.2)" }}>
-                        <div style={{ fontSize:11, color:T.success, marginBottom:4 }}>MODEL ANSWER</div>
-                        <div style={{ fontSize:13, color:T.whiteDim }}>{q.correct_answer}</div>
+                      <div style={{ padding:"10px 14px",background:"rgba(34,197,94,.06)",borderRadius:8,marginBottom:10,border:"1px solid rgba(34,197,94,.2)" }}>
+                        <div style={{ fontSize:11,color:T.success,marginBottom:4 }}>MODEL ANSWER</div>
+                        <div style={{ fontSize:13,color:T.whiteDim }}>{q.correct_answer}</div>
                       </div>
                     )}
-                    <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                      <label style={{ margin:0, textTransform:"none", letterSpacing:0, fontSize:13, whiteSpace:"nowrap" }}>Marks awarded:</label>
-                      <input type="number" min="0" max={q.marks} value={isAutoMarkable ? (isCorrect ? q.marks : 0) : (marks[q.id]||"")}
-                        onChange={e => !isAutoMarkable && setMarks(p => ({ ...p, [q.id]: e.target.value }))}
-                        readOnly={isAutoMarkable}
-                        style={{ width:70, textAlign:"center", opacity:isAutoMarkable?0.6:1 }}/>
-                      <span style={{ fontSize:13, color:T.whiteDim }}>/ {q.marks}</span>
+                    <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+                      <label style={{ margin:0,textTransform:"none",letterSpacing:0,fontSize:13,whiteSpace:"nowrap" }}>Marks awarded:</label>
+                      <input type="number" min="0" max={q.marks||1}
+                        value={isAuto?(correct?q.marks||1:0):(qMarks[q.id]??"")}
+                        readOnly={isAuto}
+                        onChange={e=>!isAuto&&setQMarks(p=>({...p,[q.id]:e.target.value}))}
+                        style={{ width:70,textAlign:"center",opacity:isAuto?.6:1 }}/>
+                      <span style={{ fontSize:13,color:T.whiteDim }}>/ {q.marks||1}</span>
                     </div>
                   </div>
                 );
               })}
               <div className="input-group">
                 <label>Overall Feedback to Student</label>
-                <textarea rows={4} placeholder="Write feedback for this student..." value={feedback} onChange={e => setFeedback(e.target.value)}/>
+                <textarea rows={4} placeholder="Write feedback for this student..." value={feedback} onChange={e=>setFeedback(e.target.value)}/>
               </div>
               <button className="btn-primary" onClick={handleSaveMark} disabled={saving} style={{ justifyContent:"center" }}>
-                {saving ? <span className="spinner"/> : "Save & Mark Complete"}
+                {saving?<span className="spinner"/>:"Save & Mark Complete"}
               </button>
             </div>
           </div>
         ) : (
-          loading ? <div style={{ textAlign:"center", padding:40 }}><span className="spinner"/></div> :
-          (submissions||[]).length === 0 ? (
-            <div className="empty-state"><h3>No submissions yet</h3><p>Students haven't submitted this test yet</p></div>
-          ) : (
+          loading ? <div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div> :
+          (submissions||[]).length===0 ? <div className="empty-state"><h3>No submissions yet</h3><p>Students haven't submitted this test yet</p></div> : (
             <div className="col">
-              {submissions.map(sub => (
-                <div key={sub.id} className="glass" style={{ padding:20, display:"flex", alignItems:"center", gap:14 }}>
+              {submissions.map(sub=>(
+                <div key={sub.id} className="glass" style={{ padding:20,display:"flex",alignItems:"center",gap:14 }}>
                   <Avatar name={sub.student_email} size={38}/>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:500, marginBottom:4 }}>{sub.student_email}</div>
-                    <div style={{ fontSize:12, color:T.whiteDim }}>Submitted: {sub.submitted_at?.split("T")[0]}</div>
+                    <div style={{ fontWeight:500,marginBottom:4 }}>{sub.student_email}</div>
+                    <div style={{ fontSize:12,color:T.whiteDim }}>Submitted: {sub.submitted_at?.split("T")[0]}</div>
                   </div>
-                  <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                    {sub.score !== null && <span style={{ fontSize:20, fontWeight:700, color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</span>}
-                    <span className={`badge ${sub.status==="released"?"badge-green":sub.status==="marked"?"badge-teal":"badge-orange"}`}>{sub.status}</span>
-                    <button className="btn-ghost" style={{ padding:"7px 13px", fontSize:12 }} onClick={() => setSelected(sub)}>
-                      {sub.status==="submitted"?"Mark":"Review"}
-                    </button>
-                    {sub.status==="marked" && (
-                      <button className="btn-success" style={{ padding:"7px 13px", fontSize:12 }} onClick={() => releaseResults(sub.id)}>Release</button>
-                    )}
-                  </div>
+                  {sub.score!==null && <span style={{ fontSize:20,fontWeight:700,color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</span>}
+                  <span className={`badge ${sub.status==="released"?"badge-green":sub.status==="marked"?"badge-teal":"badge-orange"}`}>{sub.status}</span>
+                  <button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>{setSelected(sub);setQMarks({});setFeedback(sub.feedback||"");}}>
+                    {sub.status==="submitted"?"Mark":"Review"}
+                  </button>
+                  {sub.status==="marked" && <button className="btn-success" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>releaseOne(sub.id)}>Release</button>}
                 </div>
               ))}
             </div>
@@ -1797,112 +1901,150 @@ const MarkingInterface = ({ test, token, showToast, onClose }) => {
   );
 };
 
-// ─── STUDENT TESTS LIST ───────────────────────────────────────────────────────
+// ─── STUDENT TESTS LIST — with attempt control + past/missed tests ─────────────
 const StudentTestsList = ({ token, userEmail, subject }) => {
-  const { data: tests } = useDB(token, "tests", `?subject=eq.${subject}&status=eq.active&order=due_date`);
-  const { data: submissions } = useDB(token, "submissions", `?student_email=eq.${encodeURIComponent(userEmail)}`);
+  const { data:tests }       = useDB(token,"tests",       `?subject=eq.${subject}&order=due_date`);
+  const { data:submissions } = useDB(token,"submissions", `?student_email=eq.${encodeURIComponent(userEmail)}&order=submitted_at.desc`);
   const [takingTest, setTakingTest] = useState(null);
-  const [viewingResult, setViewingResult] = useState(null);
+  const [, forceUpdate] = useState(0);
 
-  const getSubmission = (testId) => (submissions||[]).find(s => s.test_id === testId);
+  if(takingTest) return <TestTaker test={takingTest} token={token} userEmail={userEmail} onFinish={()=>{setTakingTest(null);forceUpdate(p=>p+1);}}/>;
 
-  if (takingTest) {
-    return <TestTaker test={takingTest} token={token} userEmail={userEmail} onFinish={() => setTakingTest(null)}/>;
-  }
+  const today = new Date().toISOString().split("T")[0];
+  const getSubs    = (tid) => (submissions||[]).filter(s=>s.test_id===tid);
+  const getLatest  = (tid) => getSubs(tid).sort((a,b)=>new Date(b.submitted_at)-new Date(a.submitted_at))[0];
+  const canAttempt = (test) => {
+    if(test.status!=="active") return false;
+    const count = getSubs(test.id).length;
+    return test.attempts_allowed===99 || count < test.attempts_allowed;
+  };
+
+  const active = (tests||[]).filter(t=>t.status==="active"  && t.due_date>=today);
+  const past   = (tests||[]).filter(t=>t.status==="closed"  || t.due_date<today);
+  const missed = past.filter(t=>getSubs(t.id).length===0);
+
+  const TestCard = ({ test, showMissed }) => {
+    const latest   = getLatest(test.id);
+    const subCount = getSubs(test.id).length;
+    const allowed  = canAttempt(test);
+    const isPast   = test.due_date < today || test.status==="closed";
+    const borderColor = showMissed ? T.danger : isPast && subCount>0 ? T.whiteDim : SUBJECT_CONFIG[subject]?.color||T.teal;
+    return (
+      <div className="glass" style={{ padding:22, marginBottom:12, borderLeft:`3px solid ${borderColor}` }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 }}>
+          <div>
+            <div style={{ fontWeight:600,fontSize:15,marginBottom:6 }}>{test.title}</div>
+            <div style={{ display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
+              <span style={{ fontSize:12,color:T.whiteDim }}>Due: {test.due_date}</span>
+              {test.time_limit && <span style={{ fontSize:12,color:T.accent }}>⏱ {test.time_limit} min</span>}
+              <span style={{ fontSize:12,color:T.whiteDim }}>{test.attempts_allowed===99?"Unlimited":test.attempts_allowed} attempt{test.attempts_allowed!==1?"s":""}</span>
+              {subCount>0 && <span style={{ fontSize:12,color:T.whiteDim }}>Attempted: {subCount}×</span>}
+            </div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            {showMissed && <span className="badge badge-red">Missed</span>}
+            {latest && (
+              <>
+                {latest.status==="released" && latest.score!==null && (
+                  <div style={{ fontSize:24,fontWeight:700,color:latest.score>=75?T.success:latest.score>=50?T.warning:T.danger }}>{latest.score}%</div>
+                )}
+                <span className={`badge ${latest.status==="released"?"badge-green":latest.status==="marked"?"badge-teal":"badge-orange"}`}>
+                  {latest.status==="released"?"Results Released":latest.status==="marked"?"Marked — Pending Release":"Submitted"}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        {latest?.feedback && latest.status==="released" && (
+          <div style={{ padding:"10px 14px",background:T.tealGlow,borderRadius:8,marginBottom:12,border:`1px solid ${T.glassBorder}` }}>
+            <div style={{ fontSize:11,color:T.teal,fontWeight:600,marginBottom:3 }}>TUTOR FEEDBACK</div>
+            <p style={{ fontSize:13,color:T.whiteDim,lineHeight:1.6 }}>{latest.feedback}</p>
+          </div>
+        )}
+        {allowed && <button className="btn-primary" style={{ padding:"9px 20px",fontSize:13 }} onClick={()=>setTakingTest(test)}>{subCount>0?"Retry Test →":"Start Test →"}</button>}
+        {!allowed && !showMissed && subCount>0 && latest?.status==="submitted" && <p style={{ fontSize:13,color:T.whiteDim,marginTop:4 }}>Awaiting results from your tutor.</p>}
+        {!allowed && subCount>0 && (subCount>=test.attempts_allowed && test.attempts_allowed!==99) && latest?.status!=="submitted" && (
+          <p style={{ fontSize:13,color:T.whiteDim,marginTop:4 }}>Maximum attempts reached.</p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
-      <h3 className="display" style={{ fontSize:17, fontWeight:600, marginBottom:18 }}>Tests & Assignments</h3>
-      {(tests||[]).length === 0
-        ? <div className="empty-state"><h3>No active tests</h3><p>Your tutor hasn't assigned any tests yet</p></div>
-        : <div className="col">
-          {tests.map(test => {
-            const sub = getSubmission(test.id);
-            const canTake = !sub || (sub && test.attempts_allowed > 1);
-            return (
-              <div key={test.id} className="glass" style={{ padding:22 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-                  <div>
-                    <div style={{ fontWeight:600, fontSize:15, marginBottom:6 }}>{test.title}</div>
-                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                      <span style={{ fontSize:12, color:T.whiteDim }}>Due: {test.due_date}</span>
-                      <span style={{ fontSize:12, color:T.whiteDim }}>{test.attempts_allowed===99?"Unlimited":test.attempts_allowed} attempt{test.attempts_allowed!==1?"s":""}</span>
-                    </div>
-                  </div>
-                  {sub ? (
-                    <div style={{ textAlign:"right" }}>
-                      {sub.status==="released" && sub.score !== null && (
-                        <div style={{ fontSize:24, fontWeight:700, color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</div>
-                      )}
-                      <span className={`badge ${sub.status==="released"?"badge-green":sub.status==="marked"?"badge-teal":"badge-orange"}`}>{sub.status==="released"?"Results Released":sub.status==="marked"?"Marked — Pending Release":"Submitted"}</span>
-                    </div>
-                  ) : null}
-                </div>
-                {sub?.feedback && sub.status==="released" && (
-                  <div style={{ padding:"10px 14px", background:"rgba(0,212,200,.06)", borderRadius:8, marginBottom:12, border:`1px solid ${T.glassBorder}` }}>
-                    <div style={{ fontSize:11, color:T.teal, fontWeight:600, marginBottom:4 }}>TUTOR FEEDBACK</div>
-                    <p style={{ fontSize:13, color:T.whiteDim, lineHeight:1.6 }}>{sub.feedback}</p>
-                  </div>
-                )}
-                {canTake && (
-                  <button className="btn-primary" style={{ padding:"9px 20px", fontSize:13 }} onClick={() => setTakingTest(test)}>
-                    {sub ? "Retry Test →" : "Start Test →"}
-                  </button>
-                )}
-                {sub && !canTake && sub.status !== "released" && (
-                  <p style={{ fontSize:13, color:T.whiteDim }}>Awaiting results from your tutor.</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      }
+      <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Tests & Assignments</h3>
+
+      {active.length===0 && past.length===0 && (
+        <div className="empty-state"><h3>No tests yet</h3><p>Your tutor hasn't assigned any tests yet</p></div>
+      )}
+
+      {active.length>0 && (
+        <>
+          <p style={{ fontSize:11,fontWeight:600,color:T.whiteDim,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:10 }}>Active</p>
+          {active.map(t=><TestCard key={t.id} test={t}/>)}
+        </>
+      )}
+
+      {past.filter(t=>getSubs(t.id).length>0).length>0 && (
+        <>
+          <p style={{ fontSize:11,fontWeight:600,color:T.whiteDim,textTransform:"uppercase",letterSpacing:"1.5px",margin:"24px 0 10px" }}>Past Tests</p>
+          {past.filter(t=>getSubs(t.id).length>0).map(t=><TestCard key={t.id} test={t}/>)}
+        </>
+      )}
+
+      {missed.length>0 && (
+        <>
+          <p style={{ fontSize:11,fontWeight:600,color:T.danger,textTransform:"uppercase",letterSpacing:"1.5px",margin:"24px 0 10px" }}>Missed Tests</p>
+          {missed.map(t=><TestCard key={t.id} test={t} showMissed/>)}
+        </>
+      )}
     </div>
   );
 };
 
-// ─── STUDENT GRADES PAGE ──────────────────────────────────────────────────────
+// ─── STUDENT GRADES ───────────────────────────────────────────────────────────
 const StudentGrades = ({ token, userEmail, subject }) => {
-  const { data: submissions } = useDB(token, "submissions",
-    `?student_email=eq.${encodeURIComponent(userEmail)}&status=eq.released&order=submitted_at.desc`
-  );
-  const { data: tests } = useDB(token, "tests", `?subject=eq.${subject}`);
-
-  const getTest = (id) => (tests||[]).find(t => t.id === id);
-  const subjectSubs = (submissions||[]).filter(s => { const t = getTest(s.test_id); return t?.subject === subject; });
-  const avg = subjectSubs.length > 0 ? Math.round(subjectSubs.reduce((s,x) => s+(x.score||0), 0) / subjectSubs.length) : null;
+  const { data:submissions } = useDB(token,"submissions",`?student_email=eq.${encodeURIComponent(userEmail)}&status=eq.released&order=submitted_at.desc`);
+  const { data:tests }       = useDB(token,"tests",`?subject=eq.${subject}`);
+  const getTest = (id) => (tests||[]).find(t=>t.id===id);
+  const subs = (submissions||[]).filter(s=>getTest(s.test_id)?.subject===subject);
+  const avg  = subs.length>0 ? Math.round(subs.reduce((s,x)=>s+(x.score||0),0)/subs.length) : null;
+  const cfg  = SUBJECT_CONFIG[subject]||SUBJECT_CONFIG.Mathematics;
 
   return (
     <div>
-      <h3 className="display" style={{ fontSize:17, fontWeight:600, marginBottom:18 }}>My Grades</h3>
-      {avg !== null && (
-        <div className="glass" style={{ padding:22, marginBottom:20, display:"flex", alignItems:"center", gap:20 }}>
+      <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>My Grades</h3>
+      {avg!==null && (
+        <div className="glass" style={{ padding:22,marginBottom:20,display:"flex",alignItems:"center",gap:20 }}>
           <div style={{ textAlign:"center" }}>
-            <div style={{ fontSize:48, fontWeight:700, color:avg>=75?T.success:avg>=50?T.warning:T.danger, lineHeight:1 }}>{avg}%</div>
-            <div style={{ fontSize:12, color:T.whiteDim, marginTop:4 }}>Average</div>
+            <div style={{ fontSize:48,fontWeight:700,color:avg>=75?T.success:avg>=50?T.warning:T.danger,lineHeight:1 }}>{avg}%</div>
+            <div style={{ fontSize:12,color:T.whiteDim,marginTop:4 }}>Average</div>
           </div>
           <div style={{ flex:1 }}>
             <div className="progress-bar" style={{ height:10 }}>
-              <div className="progress-fill" style={{ width:`${avg}%`, background:`linear-gradient(90deg,${avg>=75?T.success:avg>=50?T.warning:T.danger},${avg>=75?T.success:avg>=50?T.warning:T.danger}99)` }}/>
+              <div className="progress-fill" style={{ width:`${avg}%`,background:`linear-gradient(90deg,${avg>=75?T.success:avg>=50?T.warning:T.danger},${avg>=75?T.success:avg>=50?T.warning:T.danger}99)` }}/>
             </div>
-            <div style={{ fontSize:12, color:T.whiteDim, marginTop:8 }}>{subjectSubs.length} test{subjectSubs.length!==1?"s":""} completed</div>
+            <div style={{ fontSize:12,color:T.whiteDim,marginTop:8 }}>{subs.length} test{subs.length!==1?"s":""} completed</div>
           </div>
         </div>
       )}
-      {subjectSubs.length === 0
-        ? <div className="empty-state"><h3>No grades yet</h3><p>Your results will appear here after your tutor releases them</p></div>
+      {subs.length===0
+        ? <div className="empty-state"><h3>No grades yet</h3><p>Your results appear here after your tutor releases them</p></div>
         : <div className="col">
-          {subjectSubs.map(sub => {
-            const test = getTest(sub.test_id);
+          {subs.map(sub=>{
+            const test=getTest(sub.test_id);
             return (
-              <div key={sub.id} className="glass" style={{ padding:20, display:"flex", alignItems:"center", gap:14 }}>
+              <div key={sub.id} className="glass" style={{ padding:20,display:"flex",alignItems:"center",gap:14 }}>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:500, marginBottom:4 }}>{test?.title || "Test"}</div>
-                  <div style={{ fontSize:12, color:T.whiteDim }}>{sub.submitted_at?.split("T")[0]}</div>
-                  {sub.feedback && <div style={{ fontSize:13, color:T.whiteDim, marginTop:6, fontStyle:"italic" }}>"{sub.feedback}"</div>}
+                  <div style={{ fontWeight:500,marginBottom:4 }}>{test?.title||"Test"}</div>
+                  <div style={{ fontSize:12,color:T.whiteDim }}>{sub.submitted_at?.split("T")[0]}</div>
+                  {sub.feedback && <div style={{ fontSize:13,color:T.whiteDim,marginTop:6,fontStyle:"italic",lineHeight:1.5 }}>"{sub.feedback}"</div>}
                 </div>
                 <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:28, fontWeight:700, color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</div>
+                  <div style={{ fontSize:28,fontWeight:700,color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</div>
+                  <div className="progress-bar" style={{ width:80,marginTop:4 }}>
+                    <div className="progress-fill" style={{ width:`${sub.score}%`,background:`linear-gradient(90deg,${sub.score>=75?T.success:sub.score>=50?T.warning:T.danger},${sub.score>=75?T.success:sub.score>=50?T.warning:T.danger}99)` }}/>
+                  </div>
                 </div>
               </div>
             );
@@ -1912,39 +2054,13 @@ const StudentGrades = ({ token, userEmail, subject }) => {
     </div>
   );
 };
-const EvaluationsManager = () => (
-  <div className="animate-in">
-    <h1 className="display section-title" style={{ marginBottom: 4 }}>Evaluations</h1>
-    <p className="section-sub" style={{ marginBottom: 28 }}>Lesson evaluations and feedback forms</p>
-    <div className="empty-state">
-      <h3>Coming soon</h3>
-      <p>This section has not been implemented yet.</p>
-    </div>
-  </div>
-);
-const SettingsPage = ({ user }) => (
-  <div className="animate-in">
-    <h1 className="display section-title" style={{ marginBottom: 4 }}>Settings</h1>
-    <p className="section-sub" style={{ marginBottom: 28 }}>Manage your account and platform preferences</p>
-    <div className="glass" style={{ padding: 22 }}>
-      <div style={{ marginBottom: 12 }}>
-        <strong>Name:</strong> {user?.name || "-"}
-      </div>
-      <div>
-        <strong>Email:</strong> {user?.email || "-"}
-      </div>
-    </div>
-  </div>
-);
 const TutorApp = ({ user, onLogout, onPreview }) => {
   const [active, setActive] = useState("dashboard");
   const [markingTest, setMarkingTest] = useState(null);
   const { toast, show } = useToast();
   const p = { token:user.token, showToast:show, user };
 
-  if (markingTest) {
-    return <MarkingInterface test={markingTest} token={user.token} showToast={show} onClose={() => setMarkingTest(null)}/>;
-  }
+  if(markingTest) return <MarkingInterface test={markingTest} token={user.token} showToast={show} onClose={()=>setMarkingTest(null)}/>;
 
   const pages = {
     dashboard:     <TutorDashboard {...p} onNav={setActive}/>,
@@ -1960,11 +2076,12 @@ const TutorApp = ({ user, onLogout, onPreview }) => {
     questionbank:  <QuestionBankPage {...p}/>,
     settings:      <SettingsPage {...p}/>,
   };
+
   return (
     <div style={{ display:"flex", minHeight:"100vh" }}>
       <TutorSidebar active={active} onNav={setActive} onLogout={onLogout} onPreview={onPreview} user={user}/>
       <main style={{ flex:1, padding:"34px 38px", overflowY:"auto", maxWidth:"calc(100vw - 238px)" }}>
-        {pages[active] || pages.dashboard}
+        {pages[active]||pages.dashboard}
       </main>
       <Toast toast={toast}/>
     </div>
@@ -1976,18 +2093,18 @@ const StudentApp = ({ user, onLogout, token }) => {
   const [activeTab, setActiveTab] = useState("schedule");
   const { data:announcements } = useDB(token,"announcements","?order=created_at.desc&limit=6");
   const { data:sessions } = useDB(token,"sessions", selectedSubject?`?subject=eq.${selectedSubject}&order=session_date,session_time`:"", [selectedSubject]);
-  const { data:videos } = useDB(token,"videos", selectedSubject?`?subject=eq.${selectedSubject}&order=created_at.desc`:"", [selectedSubject]);
-  const subjects = user.subjects || [];
-  const today = new Date().toISOString().split("T")[0];
+  const { data:videos   } = useDB(token,"videos",   selectedSubject?`?subject=eq.${selectedSubject}&order=created_at.desc`:"",       [selectedSubject]);
+  const subjects = user.subjects||[];
+  const today    = new Date().toISOString().split("T")[0];
 
   const renderTab = () => {
-    const cfg = SUBJECT_CONFIG[selectedSubject] || SUBJECT_CONFIG.Mathematics;
-    switch(activeTab) {
+    const cfg = SUBJECT_CONFIG[selectedSubject]||SUBJECT_CONFIG.Mathematics;
+    switch(activeTab){
       case "schedule": return (
         <div>
           <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Upcoming Sessions</h3>
           {(sessions||[]).filter(s=>s.session_date>=today).length===0
-            ?<div className="empty-state"><h3>No upcoming sessions</h3><p>Your tutor hasn't scheduled any sessions yet</p></div>
+            ?<div className="empty-state"><h3>No upcoming sessions</h3><p>Check back later</p></div>
             :(sessions||[]).filter(s=>s.session_date>=today).map(s=>(
               <div key={s.id} className="glass" style={{ padding:18,marginBottom:10,display:"flex",gap:14,alignItems:"center",borderLeft:`3px solid ${cfg.color}` }}>
                 <div style={{ textAlign:"center",minWidth:50 }}>
@@ -2004,10 +2121,10 @@ const StudentApp = ({ user, onLogout, token }) => {
             ))}
         </div>
       );
-      case "materials": return (<div><h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Study Materials</h3><div className="empty-state"><h3>No materials yet</h3><p>Your tutor will upload materials here</p></div></div>);
-      case "grades":    return <StudentGrades token={token} userEmail={user.email} subject={selectedSubject}/>;
-      case "tests":     return <StudentTestsList token={token} userEmail={user.email} subject={selectedSubject}/>;
-      case "videos":    return (
+      case "materials":   return (<div><h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Study Materials</h3><div className="empty-state"><h3>No materials yet</h3><p>Your tutor will upload materials here</p></div></div>);
+      case "grades":      return <StudentGrades token={token} userEmail={user.email} subject={selectedSubject}/>;
+      case "tests":       return <StudentTestsList token={token} userEmail={user.email} subject={selectedSubject}/>;
+      case "videos":      return (
         <div>
           <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Recorded Lessons</h3>
           {(videos||[]).length===0
@@ -2021,7 +2138,7 @@ const StudentApp = ({ user, onLogout, token }) => {
             ))}
         </div>
       );
-      case "evaluations": return (<div><h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Lesson Evaluations</h3><div className="empty-state"><h3>No evaluations open</h3><p>Your tutor will post evaluations after lessons</p></div></div>);
+      case "evaluations": return (<div><h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Evaluations</h3><div className="empty-state"><h3>No evaluations open</h3><p>Your tutor will post evaluations after lessons</p></div></div>);
       default: return <div style={{ color:T.whiteDim }}>Coming soon</div>;
     }
   };
@@ -2043,7 +2160,7 @@ const StudentApp = ({ user, onLogout, token }) => {
           <h1 className="display" style={{ fontSize:27,fontWeight:700,marginBottom:4 }}>Welcome back, {user.name?.split(" ")[0]} 👋</h1>
           <p style={{ color:T.whiteDim,marginBottom:36 }}>Select a subject to get started</p>
           {subjects.length===0
-            ?<div className="empty-state"><h3>No subjects yet</h3><p>Your tutor hasn't enrolled you in any subjects yet.</p></div>
+            ?<div className="empty-state"><h3>No subjects yet</h3><p>Your tutor hasn't enrolled you yet</p></div>
             :(
               <div style={{ display:"flex",gap:18,flexWrap:"wrap",marginBottom:44 }}>
                 {subjects.map(subject=>{
@@ -2063,7 +2180,7 @@ const StudentApp = ({ user, onLogout, token }) => {
                 })}
               </div>
             )}
-          {(announcements||[]).length>0&&(
+          {(announcements||[]).length>0 && (
             <div>
               <h3 className="display" style={{ fontSize:15,fontWeight:600,marginBottom:14 }}>Latest Announcements</h3>
               <div className="col">
@@ -2106,44 +2223,44 @@ const StudentApp = ({ user, onLogout, token }) => {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState("landing");
-  const [role, setRole] = useState(null);
-  const [user, setUser] = useState(null);
+  const [screen, setScreen]       = useState("landing");
+  const [role,   setRole]         = useState(null);
+  const [user,   setUser]         = useState(null);
   const [showQuote, setShowQuote] = useState(false);
-  const [activeQuote, setActiveQuote] = useState(null);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [activeQuote,setActiveQuote] = useState(null);
+  const [previewMode,setPreviewMode] = useState(false);
   const { toast, show } = useToast();
 
-  useEffect(() => {
+  useEffect(()=>{
     try {
       const saved = sessionStorage.getItem("proveit_user");
-      if (saved) { const u=JSON.parse(saved); setUser(u); setScreen("app"); }
-    } catch(e) {}
-  }, []);
+      if(saved){ const u=JSON.parse(saved); setUser(u); setScreen("app"); }
+    } catch(e){}
+  },[]);
 
   const handleLogin = async (userData) => {
-    try { sessionStorage.setItem("proveit_user", JSON.stringify(userData)); } catch(e) {}
+    try { sessionStorage.setItem("proveit_user",JSON.stringify(userData)); } catch(e){}
     setUser(userData);
-    if (userData.role==="student") {
+    if(userData.role==="student"){
       try {
         const t=await sb.from(userData.token,"quotes");
         const qs=await t.select("?active=eq.true&limit=1");
         if(qs?.length>0){ setActiveQuote(qs[0]); setShowQuote(true); }
-      } catch(e) {}
+      } catch(e){}
     }
     setScreen("app");
   };
 
   const handleLogout = async () => {
     if(user?.token){ try { await sb.signOut(user.token); } catch(e){} }
-    try { sessionStorage.removeItem("proveit_user"); } catch(e) {}
+    try { sessionStorage.removeItem("proveit_user"); } catch(e){}
     setUser(null); setRole(null); setScreen("landing"); setPreviewMode(false); setShowQuote(false); setActiveQuote(null);
   };
 
   return (
     <>
       <GlobalStyles/>
-      {showQuote&&activeQuote&&<QuoteSplash quote={{ text:activeQuote.text, author:activeQuote.author, bg:activeQuote.bg_color, textColor:activeQuote.text_color }} onDismiss={()=>setShowQuote(false)}/>}
+      {showQuote&&activeQuote&&<QuoteSplash quote={{ text:activeQuote.text,author:activeQuote.author,bg:activeQuote.bg_color,textColor:activeQuote.text_color }} onDismiss={()=>setShowQuote(false)}/>}
       {screen==="landing"&&<LandingPage onSelect={r=>{setRole(r);setScreen("login");}}/>}
       {screen==="login"&&<LoginForm role={role} onLogin={handleLogin} onBack={()=>setScreen("landing")} showToast={show}/>}
       {screen==="app"&&!showQuote&&user&&(
