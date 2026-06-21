@@ -453,7 +453,7 @@ const TutorDashboard = ({ token, onNav }) => {
   ];
   return (
     <div className="animate-in">
-      <h1 className="display section-title">Welcome back,{user.name?.split(" ")[0]} 👋</h1>
+      <h1 className="display section-title">Welcome back,{user.name?.split(" ")[0] || "User"} 👋</h1>
       <p className="section-sub" style={{ marginBottom:28 }}>Here's your platform at a glance.</p>
       <div className="grid-4" style={{ marginBottom:28 }}>
         {stats.map(s=>(
@@ -478,7 +478,14 @@ const TutorDashboard = ({ token, onNav }) => {
                 <div style={{ fontSize:13, fontWeight:500, marginBottom:3 }}>{t.title}</div>
                 <span className={subjectTag(t.subject)+" tag"}>{t.subject}</span>
               </div>
-              <span className={`badge ${t.status==="active"?"badge-green":t.status==="draft"?"badge-teal":"badge-gray"}`}>{t.status}</span>
+              <span className={`badge ${
+                     t.status==="active"
+                     ?"badge-green"
+                     :t.status==="draft"
+                     ?"badge-teal"
+                     :"badge-gray"
+            }`}
+                >{t.status}</span>
             </div>
           ))}
         </div>
