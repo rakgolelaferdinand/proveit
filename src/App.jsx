@@ -276,8 +276,8 @@ const LandingPage = ({ onSelect }) => {
         <div style={{ display:"flex", gap:16, justifyContent:"center", flexWrap:"wrap" }}>
           {[
             { role:"student", label:"I am a Student", sub:"Access subjects, tests & materials", icon:"students" },
-            { role:"tutor",   label:"I am a Tutor",   sub:"Manage your students",  icon:"shield"   },
-            { role:"admin", label:"ADMIN", sub:"Administrations", icon:"analytics"},
+            { role:"tutor",   label:"I am a Tutor",   sub:"Manage your students",  icon:"shield" },
+            { role:"admin",   label:"ADMIN",   sub:"Administrator",  icon:"analytics" },
           ].map(({ role, label, sub, icon }) => (
             <div key={role} className="glass" onClick={() => onSelect(role)}
               onMouseEnter={() => setHov(role)} onMouseLeave={() => setHov(null)}
@@ -322,15 +322,54 @@ const LoginForm = ({ role, onLogin, onBack, showToast }) => {
         profiles = await t.select(`?email=eq.${encodeURIComponent(email.trim())}`);
       } catch(e) { /* table not yet created — proceed as first-time tutor */ }
       const profile = profiles?.[0];
+      
       if (!profile) {
-        const newProfile = { email: email.trim(), role, name: email.split("@")[0], subjects: role==="tutor"?["Mathematics","Physics","Chemistry"]:[] };
+        // New user — create profile with selected role
+        const newProfile = { 
+          email: email.trim(), 
+          role, 
+          name: email.split("@")[0], 
+          subjects: (role === "tutor" || role === "admin") ? ["Mathematics", "Physics", "Chemistry"] : [] 
+        };
         try {
           const t = await sb.from(token, "profiles");
           await t.upsert(newProfile);
         } catch(e) { /* table not ready yet */ }
         onLogin({ ...newProfile, token, uid: data.user?.id });
       } else {
-        if (profile.role !== role) { setError(`This account is a ${profile.role}, not a ${role}.`); await sb.signOut(token); setLoading(false); return; }
+        // Existing user — validate role access
+        const profileRole = profile.role;
+        
+        // Define role hierarchy: admin > tutor > student
+        const canAccess = (requestedRole, actualRole) => {
+          if (requestedRole === "student") {
+            return actualRole === "student";
+          }
+          if (requestedRole === "tutor") {
+            return actualRole === "tutor" || actualRole === "admin";
+          }
+          if (requestedRole === "admin") {
+            return actualRole === "admin";
+          }
+          return false;
+        };
+        
+        if (!canAccess(role, profileRole)) {
+          if (profileRole === "student") {
+            setError("This account is a student. Use the Student portal.");
+          } else if (profileRole === "tutor" && role === "admin") {
+            setError("This account is a tutor, not an admin.");
+          } else if ((profileRole === "tutor" || profileRole === "admin") && role === "student") {
+            setError(`This account is a ${profileRole}. Use the ${profileRole === "admin" ? "Admin" : "Tutor"} portal.`);
+          } else {
+            setError(`Access denied. This account is a ${profileRole}.`);
+          }
+          await sb.signOut(token);
+          setLoading(false);
+          return;
+        }
+        
+        // Grant access with the profile's actual role (so admin features work)
         onLogin({ ...profile, token, uid: data.user?.id });
       }
     } catch(e) { setError(e.message || "Login failed. Check your credentials."); }
@@ -342,7 +381,8 @@ const LoginForm = ({ role, onLogin, onBack, showToast }) => {
     setLoading(true);
     try {
       await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
-        method:"POST", headers:{ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY },
+        method: "POST", 
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
         body: JSON.stringify({ email: email.trim() }),
       });
       setResetSent(true);
@@ -351,35 +391,37 @@ const LoginForm = ({ role, onLogin, onBack, showToast }) => {
   };
 
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:24, position:"relative" }}>
-      <div style={{ position:"absolute", inset:0, backgroundImage:`linear-gradient(rgba(0,212,200,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,200,.03) 1px,transparent 1px)`, backgroundSize:"40px 40px" }}/>
-      <div className="glass float-up" style={{ width:"100%", maxWidth:420, padding:38, position:"relative", zIndex:1 }}>
-        <button onClick={onBack} className="btn-ghost" style={{ padding:"5px 13px", fontSize:12, marginBottom:26 }}>← Back</button>
-        <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:6 }}>
-          <Icon name="logo" size={26}/><span className="display" style={{ fontSize:22, fontWeight:700 }}>Prove<span style={{ color:T.teal }}>It!</span></span>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative" }}>
+      <div style={{ position: "absolute", inset: 0, backgroundImage: `linear-gradient(rgba(0,212,200,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,200,.03) 1px,transparent 1px)`, backgroundSize: "40px 40px" }}/>
+      <div className="glass float-up" style={{ width: "100%", maxWidth: 420, padding: 38, position: "relative", zIndex: 1 }}>
+        <button onClick={onBack} className="btn-ghost" style={{ padding: "5px 13px", fontSize: 12, marginBottom: 26 }}>← Back</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 6 }}>
+          <Icon name="logo" size={26}/><span className="display" style={{ fontSize: 22, fontWeight: 700 }}>Prove<span style={{ color: T.teal }}>It!</span></span>
         </div>
-        <h2 className="display" style={{ fontSize:19, fontWeight:600, marginBottom:3 }}>{role==="tutor"?"Tutor Portal":"Student Portal"}</h2>
-        <p style={{ color:T.whiteDim, fontSize:13, marginBottom:28 }}>Sign in to continue</p>
+        <h2 className="display" style={{ fontSize: 19, fontWeight: 600, marginBottom: 3 }}>
+          {role === "admin" ? "Admin Portal" : role === "tutor" ? "Tutor Portal" : "Student Portal"}
+        </h2>
+        <p style={{ color: T.whiteDim, fontSize: 13, marginBottom: 28 }}>Sign in to continue</p>
         {resetSent ? (
-          <div style={{ textAlign:"center", padding:"20px 0" }}>
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
             <Icon name="mail" size={40}/>
-            <p style={{ marginTop:14, color:T.whiteDim, fontSize:14 }}>Reset link sent to <strong style={{ color:T.white }}>{email}</strong>. Check your inbox.</p>
-            <button className="btn-ghost" style={{ marginTop:20 }} onClick={() => { setResetSent(false); setForgotMode(false); }}>Back to Login</button>
+            <p style={{ marginTop: 14, color: T.whiteDim, fontSize: 14 }}>Reset link sent to <strong style={{ color: T.white }}>{email}</strong>. Check your inbox.</p>
+            <button className="btn-ghost" style={{ marginTop: 20 }} onClick={() => { setResetSent(false); setForgotMode(false); }}>Back to Login</button>
           </div>
         ) : (
           <div className="col">
-            <div className="input-group"><label>Email Address</label><input type="email" placeholder="your@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!forgotMode&&handleLogin()} autoFocus/></div>
-            {!forgotMode && <div className="input-group"><label>Password</label><input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></div>}
-            {error && <div style={{ background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.3)", borderRadius:8, padding:"10px 14px", fontSize:13, color:T.danger }}>{error}</div>}
+            <div className="input-group"><label>Email Address</label><input type="email" placeholder="your@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && !forgotMode && handleLogin()} autoFocus/></div>
+            {!forgotMode && <div className="input-group"><label>Password</label><input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}/></div>}
+            {error && <div style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.3)", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: T.danger }}>{error}</div>}
             {forgotMode ? (
-              <div style={{ display:"flex", gap:10 }}>
-                <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setForgotMode(false)}>Cancel</button>
-                <button className="btn-primary" style={{ flex:1, justifyContent:"center" }} onClick={handleForgot} disabled={loading}>{loading?<span className="spinner"/>:"Send Reset Link"}</button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setForgotMode(false)}>Cancel</button>
+                <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={handleForgot} disabled={loading}>{loading ? <span className="spinner"/> : "Send Reset Link"}</button>
               </div>
             ) : (
               <>
-                <button className="btn-primary" style={{ padding:14, justifyContent:"center" }} onClick={handleLogin} disabled={loading}>{loading?<span className="spinner"/>:"Sign In"}</button>
-                <button onClick={()=>setForgotMode(true)} style={{ background:"none", border:"none", color:T.whiteDim, fontSize:13, cursor:"pointer", textDecoration:"underline" }}>Forgot password?</button>
+                <button className="btn-primary" style={{ padding: 14, justifyContent: "center" }} onClick={handleLogin} disabled={loading}>{loading ? <span className="spinner"/> : "Sign In"}</button>
+                <button onClick={() => setForgotMode(true)} style={{ background: "none", border: "none", color: T.whiteDim, fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>Forgot password?</button>
               </>
             )}
           </div>
