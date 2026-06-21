@@ -453,7 +453,7 @@ const TutorDashboard = ({ token, onNav }) => {
   ];
   return (
     <div className="animate-in">
-      <h1 className="display section-title">Welcome back 👋</h1>
+      <h1 className="display section-title">Welcome back,{user.name?.split(" ")[0]} 👋</h1>
       <p className="section-sub" style={{ marginBottom:28 }}>Here's your platform at a glance.</p>
       <div className="grid-4" style={{ marginBottom:28 }}>
         {stats.map(s=>(
