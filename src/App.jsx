@@ -277,7 +277,7 @@ const LandingPage = ({ onSelect }) => {
           {[
             { role:"student", label:"I am a Student", sub:"Access subjects, tests & materials", icon:"students" },
             { role:"tutor",   label:"I am a Tutor",   sub:"Manage your students",  icon:"shield"   },
-            { role:"admin", label:"ADMIN", sub:"administrator", icon:"students"},
+            { role:"admin", label:"ADMIN", sub:"Administrations", icon:"analytics"},
           ].map(({ role, label, sub, icon }) => (
             <div key={role} className="glass" onClick={() => onSelect(role)}
               onMouseEnter={() => setHov(role)} onMouseLeave={() => setHov(null)}
