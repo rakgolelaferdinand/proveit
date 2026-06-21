@@ -441,7 +441,7 @@ const QuoteSplash = ({ quote, onDismiss }) => (
     </div>
   </div>
 );
-const TutorDashboard = ({ token, onNav }) => {
+const TutorDashboard = ({ token, onNav, user }) => {
   const { data:students } = useDB(token,"profiles","?role=eq.student");
   const { data:tests }    = useDB(token,"tests","?order=created_at.desc&limit=5");
   const { data:announce } = useDB(token,"announcements","?order=created_at.desc&limit=4");
