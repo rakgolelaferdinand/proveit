@@ -2496,11 +2496,36 @@ const loadEmailJS = () => {
 const sendEmail = async (templateId, params) => {
   try {
     await loadEmailJS();
-    await window.emailjs.send(EMAILJS_SERVICE_ID, templateId, { app_url: APP_URL, date: new Date().toLocaleDateString(), ...params });
+    const resolvedId = templateId === "proveit_support" ? "proveit_support" : "proveit_notify";
+    await window.emailjs.send(EMAILJS_SERVICE_ID, resolvedId, { app_url: APP_URL, date: new Date().toLocaleDateString(), ...params });
     return true;
   } catch(e) { console.error("EmailJS error:", e); return false; }
 };
 
+const sendNotifyEmail = async ({ to_email, student_name, subject, message }) => {
+  return sendEmail("proveit_notify", { to_email, student_name, subject, message });
+};
+
+const emailEnrolment = (student_name, student_email, temp_password) =>
+  sendNotifyEmail({
+    to_email: student_email, student_name,
+    subject: "Welcome to ProveIt!",
+    message: `You have been successfully enrolled into our tutoring programme.\n\nYour login details:\nEmail: ${student_email}\nTemporary Password: ${temp_password}\n\nPlease change your password after your first login by going to Settings.`,
+  });
+
+const emailTestPublished = (student_name, student_email, test_title, subject_name, due_date) =>
+  sendNotifyEmail({
+    to_email: student_email, student_name,
+    subject: `New Test Available — ${test_title}`,
+    message: `A new ${subject_name} test has been published.\n\nTest: ${test_title}\nDue Date: ${due_date}\n\nLog in to complete your test before the deadline.`,
+  });
+
+const emailGradeReleased = (student_name, student_email, test_title, score) =>
+  sendNotifyEmail({
+    to_email: student_email, student_name,
+    subject: `Your Results Are Ready — ${test_title}`,
+    message: `Your results for ${test_title} have been released.\n\nScore: ${score}%\n\nLog in to view your full script, and your tutor's comments.`,
+  });
 // ─── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
 const useNotifications = (token, userEmail) => {
   const { data: notifs, reload } = useDB(token, "notifications", `?recipient_email=eq.${encodeURIComponent(userEmail || "")}&order=created_at.desc&limit=30`);
