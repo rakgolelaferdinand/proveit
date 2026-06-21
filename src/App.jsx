@@ -2641,7 +2641,7 @@ const WelcomeScreen = ({ user, onContinue }) => (
       <h1 className="display" style={{ fontSize: 40, fontWeight: 700, marginBottom: 8 }}>Welcome to Prove<span style={{ color: T.teal }}>It!</span></h1>
       <p style={{ fontSize: 18, color: T.whiteDim, marginBottom: 12 }}>Hi {user.name?.split(" ")[0]} 👋</p>
       <p style={{ fontSize: 15, color: T.whiteDim, lineHeight: 1.7, marginBottom: 40, maxWidth: 420, margin: "0 auto 40px" }}>
-        You've been enrolled in your tutoring programme. ProveIt! is where you'll access your tests, study materials, lesson schedules, grades and more.
+        You've been enrolled into our tutoring programme. ProveIt! is where you'll access your tests, study materials, lesson schedules, grades and more.
       </p>
       <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
         <button className="btn-primary" onClick={() => onContinue(true)} style={{ padding: "14px 32px", fontSize: 15 }}>Take a Quick Tour →</button>
