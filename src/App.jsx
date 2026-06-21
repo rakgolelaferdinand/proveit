@@ -398,49 +398,6 @@ const QuoteSplash = ({ quote, onDismiss }) => (
     </div>
   </div>
 );
-const TutorSidebar = ({ active, onNav, onLogout, onPreview, user }) => {
-  const nav = [
-    { id:"dashboard",     label:"Dashboard",          icon:"dashboard"  },
-    { id:"students",      label:"Students",           icon:"students"   },
-    { id:"tests",         label:"Tests & Assignments",icon:"tests"      },
-    { id:"materials",     label:"Materials",          icon:"materials"  },
-    { id:"analytics",     label:"Analytics",          icon:"analytics"  },
-    { id:"announcements", label:"Announcements",      icon:"announce"   },
-    { id:"schedule",      label:"Schedule",           icon:"schedule"   },
-    { id:"videos",        label:"Video Library",      icon:"video"      },
-    { id:"evaluations",   label:"Evaluations",        icon:"eval"       },
-    { id:"quotes",        label:"Motivational Quotes",icon:"quote"      },
-    { id:"questionbank",  label:"Question Bank",      icon:"bank"       },
-    { id:"settings",      label:"Settings",           icon:"settings"   },
-  ];
-  return (
-    <div style={{ width:238, background:T.navyMid, borderRight:`1px solid ${T.glassBorder}`, display:"flex", flexDirection:"column", height:"100vh", position:"sticky", top:0, flexShrink:0 }}>
-      <div style={{ padding:"22px 18px 18px", borderBottom:`1px solid ${T.glassBorder}` }}>
-        <div style={{ display:"flex", alignItems:"center", gap:9 }}><Icon name="logo" size={22}/><span className="display" style={{ fontSize:19, fontWeight:700 }}>Prove<span style={{ color:T.teal }}>It!</span></span></div>
-        <div style={{ fontSize:10, color:T.whiteDim, letterSpacing:"2px", textTransform:"uppercase", marginTop:3, marginLeft:31 }}>Tutor Portal</div>
-      </div>
-      <nav style={{ flex:1, overflowY:"auto", padding:"10px" }}>
-        {nav.map(item => (
-          <div key={item.id} className={`sidebar-link ${active===item.id?"active":""}`} onClick={()=>onNav(item.id)}>
-            <Icon name={item.icon} size={15}/><span>{item.label}</span>
-          </div>
-        ))}
-      </nav>
-      <div style={{ padding:"10px", borderTop:`1px solid ${T.glassBorder}` }}>
-        <div style={{ padding:"8px 14px", marginBottom:4, display:"flex", alignItems:"center", gap:10 }}>
-          <Avatar name={user?.name} size={28}/>
-          <div style={{ fontSize:12, lineHeight:1.3, overflow:"hidden" }}>
-            <div style={{ fontWeight:600, color:T.white, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user?.name}</div>
-            <div style={{ color:T.whiteDim, fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user?.email}</div>
-          </div>
-        </div>
-        <div className="sidebar-link" onClick={onPreview} style={{ color:T.accent }}><Icon name="eye" size={15}/><span>Student Preview</span></div>
-        <div className="sidebar-link" onClick={onLogout}><Icon name="logout" size={15}/><span>Sign Out</span></div>
-      </div>
-    </div>
-  );
-};
-
 const TutorDashboard = ({ token, onNav }) => {
   const { data:students } = useDB(token,"profiles","?role=eq.student");
   const { data:tests }    = useDB(token,"tests","?order=created_at.desc&limit=5");
@@ -1551,90 +1508,6 @@ const AnnouncementsManager = ({ token, showToast }) => {
   );
 };
 
-const ScheduleManager = ({ token, showToast }) => {
-  const { data:sessions, loading, reload } = useDB(token,"sessions","?order=session_date,session_time");
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ title:"", session_date:"", session_time:"", subject:"Mathematics", teams_link:"", type:"live" });
-  const [saving, setSaving] = useState(false);
-  const today = new Date().toISOString().split("T")[0];
-  const upcoming = (sessions||[]).filter(s=>s.session_date>=today);
-  const past = (sessions||[]).filter(s=>s.session_date<today).reverse();
-  const handleAdd = async () => {
-    if(!form.title||!form.session_date||!form.session_time){showToast("Fill required fields","error");return;}
-    setSaving(true);
-    try { const t=await sb.from(token,"sessions"); await t.insert(form); showToast("Session scheduled","success"); setShowAdd(false); setForm({title:"",session_date:"",session_time:"",subject:"Mathematics",teams_link:"",type:"live"}); reload(); }
-    catch(e){showToast(e.message,"error");}
-    setSaving(false);
-  };
-  const del = async (id) => { try { const t=await sb.from(token,"sessions"); await t.delete(`?id=eq.${id}`); showToast("Removed","info"); reload(); } catch(e){showToast(e.message,"error");} };
-  const SessionRow = ({ s }) => {
-    const cfg = SUBJECT_CONFIG[s.subject]||SUBJECT_CONFIG.Mathematics;
-    return (
-      <div className="glass" style={{ padding:18,display:"flex",alignItems:"center",gap:14,borderLeft:`3px solid ${cfg.color}`,marginBottom:10 }}>
-        <div style={{ textAlign:"center",minWidth:50 }}>
-          <div style={{ fontSize:22,fontWeight:700,color:cfg.color,lineHeight:1 }}>{s.session_date?.split("-")[2]}</div>
-          <div style={{ fontSize:10,color:T.whiteDim,textTransform:"uppercase" }}>{new Date(s.session_date+"T12:00").toLocaleString("default",{month:"short"})}</div>
-        </div>
-        <div style={{ width:1,height:34,background:T.glassBorder }}/>
-        <div style={{ flex:1 }}>
-          <div style={{ fontWeight:600,fontSize:14.5,marginBottom:4 }}>{s.title}</div>
-          <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-            <span className={`tag ${subjectTag(s.subject)}`}>{s.subject}</span>
-            <span style={{ fontSize:12,color:T.whiteDim }}>⏰ {s.session_time}</span>
-            <span className={`badge ${s.type==="live"?"badge-teal":"badge-orange"}`}>{s.type==="live"?"Live Lesson":"Test"}</span>
-          </div>
-        </div>
-        {s.teams_link&&<a href={s.teams_link} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration:"none",fontSize:13,padding:"8px 14px" }}><Icon name="teams" size={13}/>Join</a>}
-        <button className="btn-danger" style={{ padding:"7px 9px" }} onClick={()=>del(s.id)}><Icon name="trash" size={14}/></button>
-      </div>
-    );
-  };
-  return (
-    <div className="animate-in">
-      <div className="section-header">
-        <div><h1 className="display section-title">Schedule</h1><p className="section-sub">Lessons and tests with MS Teams links</p></div>
-        <button className="btn-primary" onClick={()=>setShowAdd(true)}><Icon name="plus" size={14}/>Schedule Session</button>
-      </div>
-      {loading?<div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div>:(
-        <>
-          <p style={{ fontSize:12,color:T.whiteDim,textTransform:"uppercase",letterSpacing:"1.5px",fontWeight:600,marginBottom:12 }}>Upcoming</p>
-          {upcoming.length===0?<div className="empty-state"><h3>No upcoming sessions</h3><p>Schedule your next lesson</p></div>:upcoming.map(s=><SessionRow key={s.id} s={s}/>)}
-          {past.length>0&&<>
-            <p style={{ fontSize:12,color:T.whiteDim,textTransform:"uppercase",letterSpacing:"1.5px",fontWeight:600,margin:"24px 0 12px" }}>Past Sessions</p>
-            <div style={{ opacity:.55 }}>{past.map(s=><SessionRow key={s.id} s={s}/>)}</div>
-          </>}
-        </>
-      )}
-      {showAdd&&(
-        <div className="modal-overlay" onClick={()=>setShowAdd(false)}>
-          <div className="modal modal-lg" onClick={e=>e.stopPropagation()}>
-            <div style={{ display:"flex",justifyContent:"space-between",marginBottom:22 }}>
-              <h2 className="display" style={{ fontSize:19,fontWeight:600 }}>Schedule Session</h2>
-              <button onClick={()=>setShowAdd(false)} style={{ background:"none",border:"none",color:T.whiteDim,cursor:"pointer" }}><Icon name="close" size={20}/></button>
-            </div>
-            <div className="col">
-              <div className="input-group"><label>Title</label><input placeholder="e.g. Mathematics: Calculus Review" value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))}/></div>
-              <div className="grid-2">
-                <div className="input-group"><label>Date</label><input type="date" value={form.session_date} onChange={e=>setForm(p=>({...p,session_date:e.target.value}))}/></div>
-                <div className="input-group"><label>Time</label><input type="time" value={form.session_time} onChange={e=>setForm(p=>({...p,session_time:e.target.value}))}/></div>
-              </div>
-              <div className="grid-2">
-                <div className="input-group"><label>Subject</label><select value={form.subject} onChange={e=>setForm(p=>({...p,subject:e.target.value}))}>{["Mathematics","Physics","Chemistry"].map(s=><option key={s}>{s}</option>)}</select></div>
-                <div className="input-group"><label>Type</label><select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}><option value="live">Live Lesson</option><option value="test">Test / Assessment</option></select></div>
-              </div>
-              <div className="input-group"><label>MS Teams Link</label><input placeholder="https://teams.microsoft.com/l/meetup-join/..." value={form.teams_link} onChange={e=>setForm(p=>({...p,teams_link:e.target.value}))}/></div>
-              <div style={{ display:"flex",gap:10 }}>
-                <button className="btn-ghost" onClick={()=>setShowAdd(false)} style={{ flex:1 }}>Cancel</button>
-                <button className="btn-primary" onClick={handleAdd} disabled={saving} style={{ flex:1,justifyContent:"center" }}>{saving?<span className="spinner"/>:"Schedule"}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const VideoLibrary = ({ token, showToast }) => {
   const [subject, setSubject] = useState("Mathematics");
   const { data:videos, loading, reload } = useDB(token,"videos",`?subject=eq.${subject}&order=created_at.desc`,[subject]);
@@ -1802,67 +1675,6 @@ const QuestionBank = ({ showToast }) => (
 
 
 
-const SettingsPage = ({ token, showToast, user }) => {
-  const { data:tutors, loading, reload } = useDB(token,"profiles","?role=eq.tutor");
-  const [newEmail, setNewEmail] = useState("");
-  const [newTab, setNewTab] = useState("");
-  const [customTabs, setCustomTabs] = useState([]);
-  const addTutor = async () => {
-    if(!newEmail)return;
-    try { const t=await sb.from(token,"profiles"); await t.upsert({email:newEmail.trim(),role:"tutor",name:newEmail.split("@")[0],subjects:["Mathematics","Physics","Chemistry"]}); showToast("Tutor access granted","success"); setNewEmail(""); reload(); }
-    catch(e){showToast(e.message,"error");}
-  };
-  const removeTutor = async (email) => {
-    if(email===user.email){showToast("Cannot remove yourself","error");return;}
-    try { const t=await sb.from(token,"profiles"); await t.update({role:"student"},`?email=eq.${encodeURIComponent(email)}`); showToast("Removed","info"); reload(); }
-    catch(e){showToast(e.message,"error");}
-  };
-  return (
-    <div className="animate-in">
-      <h1 className="display section-title" style={{ marginBottom:4 }}>Settings</h1>
-      <p className="section-sub" style={{ marginBottom:28 }}>Platform configuration and access control</p>
-      <div className="col">
-        <div className="glass" style={{ padding:24 }}>
-          <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:6 }}><Icon name="shield" size={18}/><h3 className="display" style={{ fontSize:16,fontWeight:600 }}>Tutor Access Control</h3></div>
-          <p style={{ color:T.whiteDim,fontSize:13,marginBottom:18 }}>Only these emails can access the Tutor Portal</p>
-          <div style={{ display:"flex",gap:9,marginBottom:14 }}>
-            <input placeholder="Add tutor email..." value={newEmail} onChange={e=>setNewEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTutor()}/>
-            <button className="btn-primary" onClick={addTutor}>Add</button>
-          </div>
-          {loading?<div style={{ color:T.whiteDim,fontSize:13 }}>Loading...</div>:
-           (tutors||[]).map(t=>(
-            <div key={t.email} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(0,212,200,.05)",borderRadius:8,border:`1px solid ${T.glassBorder}`,marginBottom:8 }}>
-              <div style={{ display:"flex",alignItems:"center",gap:10 }}><Avatar name={t.name} size={28}/><span style={{ fontSize:14 }}>{t.email}</span>{t.email===user.email&&<span className="badge badge-teal">You</span>}</div>
-              <button className="btn-danger" style={{ padding:"5px 11px",fontSize:12 }} onClick={()=>removeTutor(t.email)}>Remove</button>
-            </div>
-          ))}
-        </div>
-        <div className="glass" style={{ padding:24 }}>
-          <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:6 }}><Icon name="dashboard" size={18}/><h3 className="display" style={{ fontSize:16,fontWeight:600 }}>Student Subject Tabs</h3></div>
-          <p style={{ color:T.whiteDim,fontSize:13,marginBottom:18 }}>Manage the tabs students see inside each subject</p>
-          <div style={{ display:"flex",gap:9,marginBottom:14 }}>
-            <input placeholder="New tab name..." value={newTab} onChange={e=>setNewTab(e.target.value)}/>
-            <button className="btn-primary" onClick={()=>{ if(newTab.trim()){setCustomTabs(p=>[...p,{id:`c-${Date.now()}`,label:newTab.trim()}]);setNewTab("");showToast("Tab added","success");} }}>Add Tab</button>
-          </div>
-          {DEFAULT_TABS.map(t=>(
-            <div key={t.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:"rgba(255,255,255,.03)",borderRadius:8,border:`1px solid ${T.glassBorder}`,marginBottom:6 }}>
-              <Icon name={t.icon} size={14}/><span style={{ flex:1,fontSize:14 }}>{t.label}</span><span className="badge badge-gray">Default</span>
-            </div>
-          ))}
-          {customTabs.map(t=>(
-            <div key={t.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:"rgba(255,255,255,.03)",borderRadius:8,border:`1px solid ${T.glassBorder}`,marginBottom:6 }}>
-              <span style={{ flex:1,fontSize:14 }}>{t.label}</span>
-              <button className="btn-danger" style={{ padding:"4px 9px",fontSize:12 }} onClick={()=>setCustomTabs(p=>p.filter(x=>x.id!==t.id))}>Remove</button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-// ─── PHASE 3+4: COMPLETE TEST ENGINE ─────────────────────────────────────────
-
-// ─── LaTeX / KaTeX loader ────────────────────────────────────────────────────
 const loadKaTeX = () => {
   if (window.katex) return Promise.resolve();
   return new Promise((resolve) => {
@@ -2512,142 +2324,6 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
 };
 
 // ─── MARKING INTERFACE ────────────────────────────────────────────────────────
-const MarkingInterface = ({ test, token, showToast, onClose }) => {
-  const { data:submissions, loading, reload } = useDB(token,"submissions",`?test_id=eq.${test.id}&order=submitted_at`);
-  const { data:questions } = useDB(token,"questions",`?test_id=eq.${test.id}&order=order_index`);
-  const [selected,  setSelected]  = useState(null);
-  const [qMarks,    setQMarks]    = useState({});
-  const [feedback,  setFeedback]  = useState("");
-  const [saving,    setSaving]    = useState(false);
-
-  const totalMarks = (questions||[]).reduce((s,q)=>s+(q.marks||1),0);
-
-  const handleSaveMark = async () => {
-    const awarded = (questions||[]).reduce((s,q)=>{
-      if(q.type==="mcq"||q.type==="true_false"){
-        return s+(selected.answers?.[q.id]===q.correct_answer?(q.marks||1):0);
-      }
-      return s+(Number(qMarks[q.id])||0);
-    },0);
-    const score = Math.round((awarded/totalMarks)*100);
-    setSaving(true);
-    try {
-      const t=await sb.from(token,"submissions");
-      await t.update({score,feedback,status:"marked",question_marks:qMarks},`?id=eq.${selected.id}`);
-      showToast(`Marked: ${score}%`,"success"); reload(); setSelected(null);
-    } catch(e){ showToast(e.message,"error"); }
-    setSaving(false);
-  };
-
-  const releaseAll = async () => {
-    try {
-      const t=await sb.from(token,"submissions");
-      await t.update({status:"released"},`?test_id=eq.${test.id}&status=eq.marked`);
-      showToast("All results released","success"); reload();
-    } catch(e){ showToast(e.message,"error"); }
-  };
-
-  const releaseOne = async (id) => {
-    try {
-      const t=await sb.from(token,"submissions");
-      await t.update({status:"released"},`?id=eq.${id}`);
-      showToast("Released","success"); reload();
-    } catch(e){ showToast(e.message,"error"); }
-  };
-
-  const markedCount = (submissions||[]).filter(s=>s.status==="marked"||s.status==="released").length;
-
-  return (
-    <div style={{ position:"fixed",inset:0,background:T.navy,zIndex:500,overflowY:"auto" }}>
-      <div style={{ maxWidth:920,margin:"0 auto",padding:28 }}>
-        <div style={{ display:"flex",alignItems:"center",gap:14,marginBottom:28 }}>
-          <button className="btn-ghost" onClick={onClose} style={{ padding:"8px 14px",fontSize:13 }}>← Back</button>
-          <div style={{ flex:1 }}>
-            <h1 className="display" style={{ fontSize:22,fontWeight:700 }}>Marking: {test.title}</h1>
-            <p style={{ color:T.whiteDim,fontSize:13 }}>{(submissions||[]).length} submissions · {markedCount} marked</p>
-          </div>
-          {(submissions||[]).some(s=>s.status==="marked") && (
-            <button className="btn-success" onClick={releaseAll}>Release All Results</button>
-          )}
-        </div>
-
-        {selected ? (
-          <div className="animate-in">
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}>
-              <h2 className="display" style={{ fontSize:18 }}>Marking: {selected.student_email}</h2>
-              <button className="btn-ghost" onClick={()=>setSelected(null)}>← All Submissions</button>
-            </div>
-            <div className="col">
-              {(questions||[]).map((q,i)=>{
-                const ans = selected.answers?.[q.id];
-                const isAuto = q.type==="mcq"||q.type==="true_false";
-                const correct = isAuto && ans===q.correct_answer;
-                return (
-                  <div key={q.id} className="glass" style={{ padding:22 }}>
-                    <div style={{ display:"flex",justifyContent:"space-between",marginBottom:12 }}>
-                      <div style={{ fontWeight:600,fontSize:14 }}>Q{i+1} <span style={{ fontWeight:400,color:T.whiteDim }}>({q.marks||1} mark{(q.marks||1)!==1?"s":""})</span></div>
-                      {isAuto && <span style={{ color:correct?T.success:T.danger,fontWeight:600,fontSize:13 }}>{correct?"✓ Correct":"✕ Incorrect"}</span>}
-                    </div>
-                    <div style={{ fontSize:14,marginBottom:12,lineHeight:1.7 }}><RichContent content={q.content}/></div>
-                    <div style={{ padding:"10px 14px",background:"rgba(255,255,255,.04)",borderRadius:8,marginBottom:10 }}>
-                      <div style={{ fontSize:11,color:T.whiteDim,marginBottom:4 }}>STUDENT'S ANSWER</div>
-                      <div style={{ fontSize:14 }}>{ans!==undefined?<RichContent content={String(ans)}/>:<span style={{ color:T.whiteDim }}>No answer</span>}</div>
-                    </div>
-                    {(q.type==="short"||q.type==="long") && q.correct_answer && (
-                      <div style={{ padding:"10px 14px",background:"rgba(34,197,94,.06)",borderRadius:8,marginBottom:10,border:"1px solid rgba(34,197,94,.2)" }}>
-                        <div style={{ fontSize:11,color:T.success,marginBottom:4 }}>MODEL ANSWER</div>
-                        <div style={{ fontSize:13,color:T.whiteDim }}>{q.correct_answer}</div>
-                      </div>
-                    )}
-                    <div style={{ display:"flex",gap:10,alignItems:"center" }}>
-                      <label style={{ margin:0,textTransform:"none",letterSpacing:0,fontSize:13,whiteSpace:"nowrap" }}>Marks awarded:</label>
-                      <input type="number" min="0" max={q.marks||1}
-                        value={isAuto?(correct?q.marks||1:0):(qMarks[q.id]??"")}
-                        readOnly={isAuto}
-                        onChange={e=>!isAuto&&setQMarks(p=>({...p,[q.id]:e.target.value}))}
-                        style={{ width:70,textAlign:"center",opacity:isAuto?.6:1 }}/>
-                      <span style={{ fontSize:13,color:T.whiteDim }}>/ {q.marks||1}</span>
-                    </div>
-                  </div>
-                );
-              })}
-              <div className="input-group">
-                <label>Overall Feedback to Student</label>
-                <textarea rows={4} placeholder="Write feedback for this student..." value={feedback} onChange={e=>setFeedback(e.target.value)}/>
-              </div>
-              <button className="btn-primary" onClick={handleSaveMark} disabled={saving} style={{ justifyContent:"center" }}>
-                {saving?<span className="spinner"/>:"Save & Mark Complete"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          loading ? <div style={{ textAlign:"center",padding:40 }}><span className="spinner"/></div> :
-          (submissions||[]).length===0 ? <div className="empty-state"><h3>No submissions yet</h3><p>Students haven't submitted this test yet</p></div> : (
-            <div className="col">
-              {submissions.map(sub=>(
-                <div key={sub.id} className="glass" style={{ padding:20,display:"flex",alignItems:"center",gap:14 }}>
-                  <Avatar name={sub.student_email} size={38}/>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:500,marginBottom:4 }}>{sub.student_email}</div>
-                    <div style={{ fontSize:12,color:T.whiteDim }}>Submitted: {sub.submitted_at?.split("T")[0]}</div>
-                  </div>
-                  {sub.score!==null && <span style={{ fontSize:20,fontWeight:700,color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</span>}
-                  <span className={`badge ${sub.status==="released"?"badge-green":sub.status==="marked"?"badge-teal":"badge-orange"}`}>{sub.status}</span>
-                  <button className="btn-ghost" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>{setSelected(sub);setQMarks({});setFeedback(sub.feedback||"");}}>
-                    {sub.status==="submitted"?"Mark":"Review"}
-                  </button>
-                  {sub.status==="marked" && <button className="btn-success" style={{ padding:"7px 13px",fontSize:12 }} onClick={()=>releaseOne(sub.id)}>Release</button>}
-                </div>
-              ))}
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ─── STUDENT TESTS LIST — with attempt control + past/missed tests ─────────────
 const StudentTestsList = ({ token, userEmail, subject }) => {
   const { data:tests }       = useDB(token,"tests",       `?subject=eq.${subject}&order=due_date`);
   const { data:submissions } = useDB(token,"submissions", `?student_email=eq.${encodeURIComponent(userEmail)}&order=submitted_at.desc`);
@@ -2749,47 +2425,846 @@ const StudentTestsList = ({ token, userEmail, subject }) => {
 };
 
 // ─── STUDENT GRADES ───────────────────────────────────────────────────────────
-const StudentGrades = ({ token, userEmail, subject }) => {
-  const { data:submissions } = useDB(token,"submissions",`?student_email=eq.${encodeURIComponent(userEmail)}&status=eq.released&order=submitted_at.desc`);
-  const { data:tests }       = useDB(token,"tests",`?subject=eq.${subject}`);
-  const getTest = (id) => (tests||[]).find(t=>t.id===id);
-  const subs = (submissions||[]).filter(s=>getTest(s.test_id)?.subject===subject);
-  const avg  = subs.length>0 ? Math.round(subs.reduce((s,x)=>s+(x.score||0),0)/subs.length) : null;
-  const cfg  = SUBJECT_CONFIG[subject]||SUBJECT_CONFIG.Mathematics;
+
+// ─── PHASE 6: NOTIFICATIONS, ADMIN, SUPPORT, ONBOARDING, FACILITATED LESSONS ─
+
+// ─── EMAILJS CONFIG ───────────────────────────────────────────────────────────
+const EMAILJS_PUBLIC_KEY  = "6KYo6SqjlDABOmVpE";
+const EMAILJS_SERVICE_ID  = "proveit_gmail";
+const APP_URL = window.location.origin;
+
+const loadEmailJS = () => {
+  if (window.emailjs) return Promise.resolve();
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
+    s.onload = () => { window.emailjs.init(EMAILJS_PUBLIC_KEY); resolve(); };
+    document.head.appendChild(s);
+  });
+};
+
+const sendEmail = async (templateId, params) => {
+  try {
+    await loadEmailJS();
+    await window.emailjs.send(EMAILJS_SERVICE_ID, templateId, { app_url: APP_URL, date: new Date().toLocaleDateString(), ...params });
+    return true;
+  } catch(e) { console.error("EmailJS error:", e); return false; }
+};
+
+// ─── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
+const useNotifications = (token, userEmail) => {
+  const { data: notifs, reload } = useDB(token, "notifications", `?recipient_email=eq.${encodeURIComponent(userEmail || "")}&order=created_at.desc&limit=30`);
+  const unread = (notifs || []).filter(n => !n.read).length;
+
+  const markRead = async (id) => {
+    try {
+      const t = await sb.from(token, "notifications");
+      await t.update({ read: true }, `?id=eq.${id}`);
+      reload();
+    } catch(e) {}
+  };
+
+  const markAllRead = async () => {
+    try {
+      const t = await sb.from(token, "notifications");
+      await t.update({ read: true }, `?recipient_email=eq.${encodeURIComponent(userEmail)}&read=eq.false`);
+      reload();
+    } catch(e) {}
+  };
+
+  const createNotif = async (recipientEmail, title, body, type = "info") => {
+    try {
+      const t = await sb.from(token, "notifications");
+      await t.insert({ recipient_email: recipientEmail, title, body, type, read: false });
+    } catch(e) {}
+  };
+
+  return { notifs: notifs || [], unread, markRead, markAllRead, createNotif, reload };
+};
+
+// ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
+const NotificationBell = ({ token, userEmail }) => {
+  const [open, setOpen] = useState(false);
+  const { notifs, unread, markRead, markAllRead } = useNotifications(token, userEmail);
+
+  const typeColor = { test: T.accent, grade: T.success, session: T.teal, announcement: T.warning, info: T.whiteDim };
+  const typeIcon  = { test: "📝", grade: "🏆", session: "🎥", announcement: "📣", info: "ℹ️" };
 
   return (
-    <div>
-      <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>My Grades</h3>
-      {avg!==null && (
-        <div className="glass" style={{ padding:22,marginBottom:20,display:"flex",alignItems:"center",gap:20 }}>
-          <div style={{ textAlign:"center" }}>
-            <div style={{ fontSize:48,fontWeight:700,color:avg>=75?T.success:avg>=50?T.warning:T.danger,lineHeight:1 }}>{avg}%</div>
-            <div style={{ fontSize:12,color:T.whiteDim,marginTop:4 }}>Average</div>
-          </div>
-          <div style={{ flex:1 }}>
-            <div className="progress-bar" style={{ height:10 }}>
-              <div className="progress-fill" style={{ width:`${avg}%`,background:`linear-gradient(90deg,${avg>=75?T.success:avg>=50?T.warning:T.danger},${avg>=75?T.success:avg>=50?T.warning:T.danger}99)` }}/>
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(p => !p)} style={{ background: "none", border: `1px solid ${T.glassBorder}`, borderRadius: 10, padding: "6px 12px", cursor: "pointer", color: T.white, display: "flex", alignItems: "center", gap: 6, position: "relative" }}>
+        🔔
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -6, right: -6, background: T.danger, color: T.white, borderRadius: "50%", width: 18, height: 18, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 998 }} onClick={() => setOpen(false)}/>
+          <div style={{ position: "absolute", right: 0, top: 44, width: 340, background: T.navyMid, border: `1px solid ${T.glassBorder}`, borderRadius: 16, zIndex: 999, boxShadow: "0 20px 60px rgba(0,0,0,.5)", overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.glassBorder}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span className="display" style={{ fontSize: 14, fontWeight: 600 }}>Notifications {unread > 0 && <span className="badge badge-red" style={{ marginLeft: 6 }}>{unread} new</span>}</span>
+              {unread > 0 && <button onClick={markAllRead} style={{ background: "none", border: "none", color: T.teal, fontSize: 12, cursor: "pointer" }}>Mark all read</button>}
             </div>
-            <div style={{ fontSize:12,color:T.whiteDim,marginTop:8 }}>{subs.length} test{subs.length!==1?"s":""} completed</div>
+            <div style={{ maxHeight: 380, overflowY: "auto" }}>
+              {notifs.length === 0
+                ? <div style={{ padding: "32px 18px", textAlign: "center", color: T.whiteDim, fontSize: 13 }}>No notifications yet</div>
+                : notifs.map(n => (
+                  <div key={n.id} onClick={() => markRead(n.id)} style={{ padding: "12px 18px", borderBottom: `1px solid ${T.glassBorder}`, cursor: "pointer", background: n.read ? "transparent" : "rgba(0,212,200,.05)", transition: "background .2s" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,.03)"}
+                    onMouseLeave={e => e.currentTarget.style.background = n.read ? "transparent" : "rgba(0,212,200,.05)"}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>{typeIcon[n.type] || "ℹ️"}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: n.read ? 400 : 600, color: n.read ? T.whiteDim : T.white, marginBottom: 2 }}>{n.title}</div>
+                        <div style={{ fontSize: 12, color: T.whiteDim, lineHeight: 1.4 }}>{n.body}</div>
+                        <div style={{ fontSize: 10, color: T.whiteDim, marginTop: 4 }}>{n.created_at?.split("T")[0]}</div>
+                      </div>
+                      {!n.read && <div style={{ width: 8, height: 8, borderRadius: "50%", background: typeColor[n.type] || T.teal, flexShrink: 0, marginTop: 4 }}/>}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// ─── STUDENT HOME ALERTS ──────────────────────────────────────────────────────
+const StudentHomeAlerts = ({ token, subjects }) => {
+  const { data: tests    } = useDB(token, "tests",    "?status=eq.active&order=due_date");
+  const { data: sessions } = useDB(token, "sessions", "?order=session_date,session_time");
+  const today = new Date().toISOString().split("T")[0];
+  const soon  = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+
+  const activeTests = (tests    || []).filter(t => subjects.includes(t.subject) && t.due_date >= today);
+  const upcoming    = (sessions || []).filter(s => subjects.includes(s.subject) && s.session_date >= today && s.session_date <= soon);
+
+  if (activeTests.length === 0 && upcoming.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      {activeTests.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: T.accent, textTransform: "uppercase", letterSpacing: "1.5px", marginBottom: 10 }}>⚠ Active Tests</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {activeTests.map(t => {
+              const cfg = SUBJECT_CONFIG[t.subject];
+              return (
+                <div key={t.id} style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(255,107,53,.08)", border: `1px solid rgba(255,107,53,.25)`, display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{cfg?.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{t.title}</div>
+                    <div style={{ fontSize: 11, color: T.whiteDim }}>{t.subject} · Due {t.due_date}</div>
+                  </div>
+                  <span className="badge badge-orange">Due Soon</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
-      {subs.length===0
-        ? <div className="empty-state"><h3>No grades yet</h3><p>Your results appear here after your tutor releases them</p></div>
-        : <div className="col">
-          {subs.map(sub=>{
-            const test=getTest(sub.test_id);
-            return (
-              <div key={sub.id} className="glass" style={{ padding:20,display:"flex",alignItems:"center",gap:14 }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:500,marginBottom:4 }}>{test?.title||"Test"}</div>
-                  <div style={{ fontSize:12,color:T.whiteDim }}>{sub.submitted_at?.split("T")[0]}</div>
-                  {sub.feedback && <div style={{ fontSize:13,color:T.whiteDim,marginTop:6,fontStyle:"italic",lineHeight:1.5 }}>"{sub.feedback}"</div>}
+      {upcoming.length > 0 && (
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 600, color: T.teal, textTransform: "uppercase", letterSpacing: "1.5px", marginBottom: 10 }}>📅 Upcoming Sessions</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {upcoming.map(s => {
+              const cfg = SUBJECT_CONFIG[s.subject];
+              return (
+                <div key={s.id} style={{ padding: "12px 16px", borderRadius: 12, background: T.tealGlow, border: `1px solid ${T.glassBorder}`, display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{s.type === "facilitated" ? "🎬" : "🎥"}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{s.title}</div>
+                    <div style={{ fontSize: 11, color: T.whiteDim }}>{s.subject} · {s.session_date} at {s.session_time}</div>
+                  </div>
+                  {s.teams_link && <a href={s.teams_link} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration: "none", fontSize: 12, padding: "6px 12px" }}>Join</a>}
                 </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:28,fontWeight:700,color:sub.score>=75?T.success:sub.score>=50?T.warning:T.danger }}>{sub.score}%</div>
-                  <div className="progress-bar" style={{ width:80,marginTop:4 }}>
-                    <div className="progress-fill" style={{ width:`${sub.score}%`,background:`linear-gradient(90deg,${sub.score>=75?T.success:sub.score>=50?T.warning:T.danger},${sub.score>=75?T.success:sub.score>=50?T.warning:T.danger}99)` }}/>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── ONBOARDING TOUR ─────────────────────────────────────────────────────────
+const OnboardingTour = ({ onComplete }) => {
+  const [step, setStep] = useState(0);
+  const steps = [
+    { emoji: "👋", title: "Welcome to ProveIt!", body: "Your personal academic excellence platform. Let's take a quick tour so you know exactly where everything is.", btn: "Let's Go →" },
+    { emoji: "📚", title: "Your Subjects", body: "Your home screen shows the subjects you're enrolled in. Click any subject card to open it.", btn: "Got it →" },
+    { emoji: "📝", title: "Tests & Assignments", body: "Inside each subject, go to the Tests tab to see active tests, past results, and missed tests. Your due dates are always visible.", btn: "Got it →" },
+    { emoji: "📊", title: "Your Grades", body: "The Grades tab shows all your released results with scores and tutor feedback. You can also view your full marked script.", btn: "Got it →" },
+    { emoji: "📅", title: "Schedule", body: "The Schedule tab shows upcoming live lessons and facilitated lessons. Click Join to open your MS Teams session.", btn: "Got it →" },
+    { emoji: "📁", title: "Materials", body: "Your tutor uploads notes, past papers and resources here. Everything is organised by folder and downloadable.", btn: "Got it →" },
+    { emoji: "🎥", title: "Videos", body: "Missed a lesson? Watch recorded sessions here anytime. Facilitated lessons include a quiz you unlock by watching the video.", btn: "Got it →" },
+    { emoji: "💬", title: "Evaluations & Support", body: "Give lesson feedback in the Evaluations tab. Need help? Use the Support tab to send a message directly to the team.", btn: "Got it →" },
+    { emoji: "🔔", title: "Notifications", body: "The bell icon at the top shows new tests, released grades, and upcoming sessions. Check it regularly so you never miss anything.", btn: "Got it →" },
+    { emoji: "🚀", title: "You're all set!", body: "That's everything. Your subjects are waiting. Work hard, stay consistent, and ProveIt! 💪", btn: "Start Learning →" },
+  ];
+  const s = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} className="float-up">
+      <div style={{ maxWidth: 480, width: "100%", background: T.navyMid, border: `1px solid ${T.glassBorder}`, borderRadius: 24, padding: 40, textAlign: "center" }}>
+        <div style={{ fontSize: 64, marginBottom: 20 }}>{s.emoji}</div>
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 24 }}>
+          {steps.map((_, i) => (
+            <div key={i} style={{ height: 4, borderRadius: 2, background: i <= step ? T.teal : T.glassBorder, width: i === step ? 24 : 8, transition: "all .3s" }}/>
+          ))}
+        </div>
+        <h2 className="display" style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>{s.title}</h2>
+        <p style={{ color: T.whiteDim, fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}>{s.body}</p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+          {step > 0 && <button className="btn-ghost" onClick={() => setStep(p => p - 1)} style={{ padding: "12px 24px" }}>← Back</button>}
+          <button className="btn-primary" onClick={() => isLast ? onComplete() : setStep(p => p + 1)} style={{ padding: "12px 32px", fontSize: 15 }}>{s.btn}</button>
+        </div>
+        {!isLast && <button onClick={onComplete} style={{ background: "none", border: "none", color: T.whiteDim, fontSize: 12, cursor: "pointer", marginTop: 16 }}>Skip tour</button>}
+      </div>
+    </div>
+  );
+};
+
+// ─── WELCOME SCREEN (first login) ─────────────────────────────────────────────
+const WelcomeScreen = ({ user, onContinue }) => (
+  <div style={{ position: "fixed", inset: 0, zIndex: 2500, background: T.navy, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} className="float-up">
+    <div style={{ maxWidth: 560, textAlign: "center" }}>
+      <div style={{ color: T.teal, marginBottom: 24, animation: "glow 3s ease infinite" }}><Icon name="logo" size={64}/></div>
+      <h1 className="display" style={{ fontSize: 40, fontWeight: 700, marginBottom: 8 }}>Welcome to Prove<span style={{ color: T.teal }}>It!</span></h1>
+      <p style={{ fontSize: 18, color: T.whiteDim, marginBottom: 12 }}>Hi {user.name?.split(" ")[0]} 👋</p>
+      <p style={{ fontSize: 15, color: T.whiteDim, lineHeight: 1.7, marginBottom: 40, maxWidth: 420, margin: "0 auto 40px" }}>
+        You've been enrolled in your tutoring programme. ProveIt! is where you'll access your tests, study materials, lesson schedules, grades and more.
+      </p>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        <button className="btn-primary" onClick={() => onContinue(true)} style={{ padding: "14px 32px", fontSize: 15 }}>Take a Quick Tour →</button>
+        <button className="btn-ghost" onClick={() => onContinue(false)} style={{ padding: "14px 24px" }}>Skip to App</button>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── SUPPORT TAB ──────────────────────────────────────────────────────────────
+const SupportTab = ({ user, token }) => {
+  const [form, setForm]       = useState({ name: user?.name || "", issue: "" });
+  const [sending, setSending] = useState(false);
+  const [sent,    setSent]    = useState(false);
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.issue) return;
+    setSending(true);
+    try {
+      // Save to DB
+      const t = await sb.from(token, "support_tickets");
+      await t.insert({ student_name: form.name, student_email: user?.email, issue: form.issue, status: "open" });
+      // Send email
+      await sendEmail("proveit_support", { student_name: form.name, student_email: user?.email, message: form.issue });
+      setSent(true);
+    } catch(e) { console.error(e); setSent(true); }
+    setSending(false);
+  };
+
+  if (sent) return (
+    <div style={{ textAlign: "center", padding: "48px 24px" }} className="animate-in">
+      <div style={{ fontSize: 60, marginBottom: 16 }}>✅</div>
+      <h2 className="display" style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Message Sent!</h2>
+      <p style={{ color: T.whiteDim, marginBottom: 24 }}>We'll get back to you at <strong style={{ color: T.white }}>{user?.email}</strong> as soon as possible.</p>
+      <button className="btn-ghost" onClick={() => { setSent(false); setForm({ name: user?.name || "", issue: "" }); }}>Send Another</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <h3 className="display" style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>Contact Support</h3>
+      <p style={{ color: T.whiteDim, fontSize: 13, marginBottom: 24 }}>Having an issue? Send us a message and we'll respond to your email.</p>
+      <div className="col" style={{ maxWidth: 520 }}>
+        <div className="input-group"><label>Full Name</label><input placeholder="Your full name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}/></div>
+        <div className="input-group"><label>Describe Your Issue</label><textarea rows={6} placeholder="Tell us what's wrong and we'll help you fix it..." value={form.issue} onChange={e => setForm(p => ({ ...p, issue: e.target.value }))}/></div>
+        <div style={{ padding: "10px 14px", background: T.tealGlow, borderRadius: 8, fontSize: 12, color: T.teal }}>
+          📧 We'll respond to <strong>{user?.email}</strong>
+        </div>
+        <button className="btn-primary" onClick={handleSubmit} disabled={sending || !form.name || !form.issue} style={{ justifyContent: "center", padding: 14 }}>
+          {sending ? <span className="spinner"/> : "Send Message"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── ADMIN SUPPORT DASHBOARD ──────────────────────────────────────────────────
+const SupportDashboard = ({ token, showToast }) => {
+  const { data: tickets, loading, reload } = useDB(token, "support_tickets", "?order=created_at.desc");
+
+  const setStatus = async (id, status) => {
+    try {
+      const t = await sb.from(token, "support_tickets");
+      await t.update({ status }, `?id=eq.${id}`);
+      showToast(`Ticket ${status}`, "success");
+      reload();
+    } catch(e) { showToast(e.message, "error"); }
+  };
+
+  return (
+    <div className="animate-in">
+      <div className="section-header">
+        <div><h1 className="display section-title">Support Tickets</h1><p className="section-sub">{(tickets || []).filter(t => t.status === "open").length} open tickets</p></div>
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40 }}><span className="spinner"/></div> :
+       (tickets || []).length === 0 ? <div className="empty-state"><h3>No support tickets</h3><p>Student queries will appear here</p></div> : (
+        <div className="col">
+          {tickets.map(tk => (
+            <div key={tk.id} className="glass" style={{ padding: 22, borderLeft: `3px solid ${tk.status === "open" ? T.accent : T.success}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{tk.student_name}</span>
+                    <span className={`badge ${tk.status === "open" ? "badge-orange" : "badge-green"}`}>{tk.status}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: T.whiteDim }}>{tk.student_email} · {tk.created_at?.split("T")[0]}</div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {tk.status === "open"
+                    ? <button className="btn-success" style={{ padding: "6px 14px", fontSize: 12 }} onClick={() => setStatus(tk.id, "resolved")}>Mark Resolved</button>
+                    : <button className="btn-ghost"   style={{ padding: "6px 14px", fontSize: 12 }} onClick={() => setStatus(tk.id, "open")}>Reopen</button>
+                  }
+                  <a href={`mailto:${tk.student_email}`} className="btn-ghost" style={{ padding: "6px 14px", fontSize: 12, textDecoration: "none" }}>Reply →</a>
+                </div>
+              </div>
+              <div style={{ padding: "12px 14px", background: "rgba(255,255,255,.04)", borderRadius: 8, fontSize: 13, color: T.whiteDim, lineHeight: 1.6 }}>{tk.issue}</div>
+            </div>
+          ))}
+        </div>
+       )}
+    </div>
+  );
+};
+
+// ─── FACILITATED LESSONS ──────────────────────────────────────────────────────
+const FacilitatedLesson = ({ session, token, userEmail, onBack }) => {
+  const [phase, setPhase]         = useState("intro"); // intro | watching | quiz | done
+  const [timeLeft, setTimeLeft]   = useState(session.video_duration ? session.video_duration * 60 : 300);
+  const [answers, setAnswers]     = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult]       = useState(null);
+  const { data: questions }       = useDB(token, "questions", session.quiz_test_id ? `?test_id=eq.${session.quiz_test_id}&order=order_index` : null);
+
+  // Timer countdown during watching phase
+  useEffect(() => {
+    if (phase !== "watching") return;
+    if (timeLeft <= 0) { setPhase("quiz"); return; }
+    const t = setInterval(() => setTimeLeft(p => { if (p <= 1) { clearInterval(t); setPhase("quiz"); return 0; } return p - 1; }), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  const fmt = (s) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  const pct  = session.video_duration ? Math.round(((session.video_duration * 60 - timeLeft) / (session.video_duration * 60)) * 100) : 0;
+
+  const handleSubmitQuiz = async () => {
+    if (!session.quiz_test_id) return;
+    setSubmitting(true);
+    const qs = questions || [];
+    const totalMarks = qs.reduce((s, q) => s + (q.marks || 1), 0);
+    let score = 0;
+    qs.forEach(q => { if ((q.type === "mcq" || q.type === "true_false") && answers[q.id] === q.correct_answer) score += (q.marks || 1); });
+    const pct = totalMarks > 0 ? Math.round((score / totalMarks) * 100) : null;
+    try {
+      const t = await sb.from(token, "submissions");
+      await t.insert({ test_id: session.quiz_test_id, student_email: userEmail, answers, score: pct, status: "marked", attempt_number: 1 });
+      setResult(pct);
+      setPhase("done");
+    } catch(e) { console.error(e); }
+    setSubmitting(false);
+  };
+
+  // INTRO
+  if (phase === "intro") return (
+    <div className="animate-in" style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px" }}>
+      <button className="btn-ghost" onClick={onBack} style={{ padding: "7px 14px", fontSize: 12, marginBottom: 24 }}>← Back</button>
+      <div className="glass" style={{ padding: 32, textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
+        <h2 className="display" style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{session.title}</h2>
+        <p style={{ color: T.whiteDim, fontSize: 14, lineHeight: 1.7, marginBottom: 8 }}>{session.description || "Watch the full lesson video, then complete the quiz to test your understanding."}</p>
+        {session.video_duration && <p style={{ color: T.teal, fontSize: 13, marginBottom: 24 }}>⏱ Video length: {session.video_duration} minutes · Quiz unlocks when complete</p>}
+        {session.video_link && (
+          <a href={session.video_link} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginBottom: 24, color: T.teal, fontSize: 13 }}>
+            🔗 Open video in Google Drive / YouTube
+          </a>
+        )}
+        <div style={{ display: "block" }}>
+          <button className="btn-primary" onClick={() => setPhase("watching")} style={{ padding: "14px 32px", fontSize: 15 }}>
+            Start Watching → Timer Begins
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // WATCHING
+  if (phase === "watching") return (
+    <div className="animate-in" style={{ maxWidth: 760, margin: "0 auto", padding: "24px" }}>
+      <h2 className="display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 20 }}>{session.title}</h2>
+      {/* Video embed / link */}
+      <div className="glass" style={{ padding: 20, marginBottom: 20 }}>
+        {session.video_link?.includes("drive.google.com") ? (
+          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: 10 }}>
+            <iframe src={session.video_link.replace("/view", "/preview")} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} allow="autoplay" allowFullScreen title={session.title}/>
+          </div>
+        ) : session.video_link?.includes("youtube.com") || session.video_link?.includes("youtu.be") ? (
+          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: 10 }}>
+            <iframe src={session.video_link.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/")} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} allowFullScreen title={session.title}/>
+          </div>
+        ) : (
+          <div style={{ padding: "32px", textAlign: "center" }}>
+            <a href={session.video_link} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration: "none", fontSize: 15 }}>🔗 Open Video →</a>
+            <p style={{ color: T.whiteDim, fontSize: 12, marginTop: 12 }}>Watch the full video, then return here when the timer completes</p>
+          </div>
+        )}
+      </div>
+      {/* Timer */}
+      <div className="glass" style={{ padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 500 }}>Watch Timer</span>
+          <span style={{ fontFamily: "monospace", fontSize: 20, fontWeight: 700, color: timeLeft < 60 ? T.success : T.teal }}>
+            {timeLeft <= 0 ? "✓ Complete!" : fmt(timeLeft)}
+          </span>
+        </div>
+        <div className="progress-bar" style={{ height: 10, marginBottom: 12 }}>
+          <div className="progress-fill" style={{ width: `${pct}%` }}/>
+        </div>
+        <p style={{ fontSize: 12, color: T.whiteDim }}>
+          {timeLeft > 0 ? `Quiz unlocks in ${fmt(timeLeft)} — watch the full video while you wait` : "Timer complete! The quiz is now unlocked below."}
+        </p>
+        {timeLeft <= 0 && session.quiz_test_id && (
+          <button className="btn-primary" style={{ marginTop: 14, padding: "10px 24px" }} onClick={() => setPhase("quiz")}>Start Quiz →</button>
+        )}
+        {!session.quiz_test_id && timeLeft <= 0 && (
+          <div style={{ marginTop: 12, padding: "10px 14px", background: T.tealGlow, borderRadius: 8, fontSize: 13, color: T.teal }}>✓ No quiz for this session — lesson complete!</div>
+        )}
+      </div>
+    </div>
+  );
+
+  // QUIZ
+  if (phase === "quiz") {
+    const qs = questions || [];
+    const [currentQ, setCurrentQ] = useState(0);
+    const q = qs[currentQ];
+    if (!q) return (
+      <div style={{ textAlign: "center", padding: "48px 24px" }}>
+        <p style={{ color: T.whiteDim }}>No questions found for this quiz.</p>
+        <button className="btn-ghost" onClick={onBack} style={{ marginTop: 16 }}>← Back</button>
+      </div>
+    );
+    return (
+      <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px" }} className="animate-in">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, padding: "14px 0", borderBottom: `1px solid ${T.glassBorder}` }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>{session.title} — Quiz</div>
+            <div style={{ fontSize: 12, color: T.whiteDim }}>Q{currentQ + 1} of {qs.length}</div>
+          </div>
+          <button className="btn-primary" onClick={handleSubmitQuiz} disabled={submitting} style={{ padding: "8px 18px" }}>
+            {submitting ? <span className="spinner"/> : "Submit Quiz"}
+          </button>
+        </div>
+        <div className="glass" style={{ padding: 28, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+            <span style={{ width: 30, height: 30, borderRadius: "50%", background: T.tealGlow, border: `1px solid ${T.teal}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: T.teal, flexShrink: 0 }}>{currentQ + 1}</span>
+            <span className="badge badge-teal">{q.marks || 1} mark{(q.marks || 1) !== 1 ? "s" : ""}</span>
+            {answers[q.id] !== undefined && <span className="badge badge-green">✓ Answered</span>}
+          </div>
+          <div style={{ fontSize: 16, lineHeight: 1.8, marginBottom: 24 }}><RichContent content={q.content}/></div>
+          {q.type === "mcq" && (
+            <div className="col" style={{ gap: 10 }}>
+              {(q.options || []).filter(o => o).map((opt, i) => (
+                <div key={i} onClick={() => setAnswers(p => ({ ...p, [q.id]: String(i) }))}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderRadius: 10, cursor: "pointer", transition: "all .2s", border: `1px solid ${answers[q.id] === String(i) ? T.teal : T.glassBorder}`, background: answers[q.id] === String(i) ? T.tealGlow : "rgba(255,255,255,.02)" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${answers[q.id] === String(i) ? T.teal : T.whiteDim}`, background: answers[q.id] === String(i) ? T.teal : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {answers[q.id] === String(i) && <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.navy }}/>}
+                  </div>
+                  <span style={{ color: answers[q.id] === String(i) ? T.white : T.whiteDim }}><RichContent content={opt}/></span>
+                </div>
+              ))}
+            </div>
+          )}
+          {q.type === "true_false" && (
+            <div style={{ display: "flex", gap: 12 }}>
+              {["True", "False"].map(v => (
+                <div key={v} onClick={() => setAnswers(p => ({ ...p, [q.id]: v }))}
+                  style={{ flex: 1, padding: 16, borderRadius: 10, cursor: "pointer", textAlign: "center", fontWeight: 600, fontSize: 15, transition: "all .2s", border: `1px solid ${answers[q.id] === v ? T.teal : T.glassBorder}`, background: answers[q.id] === v ? T.tealGlow : "transparent", color: answers[q.id] === v ? T.teal : T.whiteDim }}>
+                  {v}
+                </div>
+              ))}
+            </div>
+          )}
+          {q.type === "short" && <input placeholder="Your answer..." value={answers[q.id] || ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 15 }}/>}
+          {q.type === "long"  && <textarea rows={6} placeholder="Your answer..." value={answers[q.id] || ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 15, lineHeight: 1.7 }}/>}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <button className="btn-ghost" onClick={() => setCurrentQ(p => Math.max(0, p - 1))} disabled={currentQ === 0}>← Previous</button>
+          <div style={{ display: "flex", gap: 5 }}>
+            {qs.map((qi, i) => (
+              <button key={i} onClick={() => setCurrentQ(i)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${i === currentQ ? T.teal : answers[qi?.id] !== undefined ? T.success : T.glassBorder}`, background: i === currentQ ? T.tealGlow : answers[qi?.id] !== undefined ? "rgba(34,197,94,.12)" : "transparent", color: i === currentQ ? T.teal : answers[qi?.id] !== undefined ? T.success : T.whiteDim, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{i + 1}</button>
+            ))}
+          </div>
+          <button className="btn-primary" onClick={() => setCurrentQ(p => Math.min(qs.length - 1, p + 1))} disabled={currentQ === qs.length - 1}>Next →</button>
+        </div>
+      </div>
+    );
+  }
+
+  // DONE
+  return (
+    <div className="animate-in" style={{ maxWidth: 560, margin: "0 auto", padding: "48px 24px", textAlign: "center" }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
+      <h2 className="display" style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>Lesson Complete!</h2>
+      {result !== null && (
+        <div className="glass" style={{ padding: 28, margin: "20px 0" }}>
+          <div style={{ fontSize: 52, fontWeight: 700, color: result >= 75 ? T.success : result >= 50 ? T.warning : T.danger, marginBottom: 4 }}>{result}%</div>
+          <div style={{ fontSize: 13, color: T.whiteDim }}>Quiz Score</div>
+        </div>
+      )}
+      <button className="btn-primary" onClick={onBack} style={{ padding: "12px 28px" }}>Back to Schedule</button>
+    </div>
+  );
+};
+
+// ─── SCHEDULE MANAGER (TUTOR) — with facilitated lessons ─────────────────────
+const ScheduleManager = ({ token, showToast }) => {
+  const { data: sessions, loading, reload } = useDB(token, "sessions", "?order=session_date,session_time");
+  const { data: tests }                     = useDB(token, "tests", "?status=neq.draft&order=title");
+  const [showAdd, setShowAdd]   = useState(false);
+  const [saving,  setSaving]    = useState(false);
+  const [form, setForm] = useState({ title: "", session_date: "", session_time: "", subject: "Mathematics", teams_link: "", type: "live", video_link: "", video_duration: "", quiz_test_id: "", description: "" });
+  const today    = new Date().toISOString().split("T")[0];
+  const upcoming = (sessions || []).filter(s => s.session_date >= today);
+  const past     = (sessions || []).filter(s => s.session_date <  today).reverse();
+
+  const handleAdd = async () => {
+    if (!form.title || !form.session_date || !form.session_time) { showToast("Fill required fields", "error"); return; }
+    setSaving(true);
+    try {
+      const t = await sb.from(token, "sessions");
+      await t.insert({ ...form, video_duration: form.video_duration ? Number(form.video_duration) : null, quiz_test_id: form.quiz_test_id || null });
+      showToast("Session scheduled", "success");
+      setShowAdd(false);
+      setForm({ title: "", session_date: "", session_time: "", subject: "Mathematics", teams_link: "", type: "live", video_link: "", video_duration: "", quiz_test_id: "", description: "" });
+      reload();
+    } catch(e) { showToast(e.message, "error"); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    try { const t = await sb.from(token, "sessions"); await t.delete(`?id=eq.${id}`); showToast("Removed", "info"); reload(); }
+    catch(e) { showToast(e.message, "error"); }
+  };
+
+  const SessionRow = ({ s }) => {
+    const cfg = SUBJECT_CONFIG[s.subject] || SUBJECT_CONFIG.Mathematics;
+    const isFacilitated = s.type === "facilitated";
+    return (
+      <div className="glass" style={{ padding: 18, display: "flex", alignItems: "center", gap: 14, borderLeft: `3px solid ${cfg.color}`, marginBottom: 10 }}>
+        <div style={{ textAlign: "center", minWidth: 50 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: cfg.color, lineHeight: 1 }}>{s.session_date?.split("-")[2]}</div>
+          <div style={{ fontSize: 10, color: T.whiteDim, textTransform: "uppercase" }}>{new Date(s.session_date + "T12:00").toLocaleString("default", { month: "short" })}</div>
+        </div>
+        <div style={{ width: 1, height: 34, background: T.glassBorder }}/>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 4 }}>{s.title}</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className={`tag ${subjectTag(s.subject)}`}>{s.subject}</span>
+            <span style={{ fontSize: 12, color: T.whiteDim }}>⏰ {s.session_time}</span>
+            <span className={`badge ${isFacilitated ? "badge-green" : "badge-teal"}`}>{isFacilitated ? "🎬 Facilitated" : "🎥 Live Lesson"}</span>
+            {isFacilitated && s.video_duration && <span style={{ fontSize: 11, color: T.whiteDim }}>{s.video_duration} min video</span>}
+          </div>
+        </div>
+        {!isFacilitated && s.teams_link && <a href={s.teams_link} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration: "none", fontSize: 13, padding: "8px 14px" }}><Icon name="teams" size={13}/>Join</a>}
+        <button className="btn-danger" style={{ padding: "7px 9px" }} onClick={() => del(s.id)}><Icon name="trash" size={14}/></button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="animate-in">
+      <div className="section-header">
+        <div><h1 className="display section-title">Schedule</h1><p className="section-sub">Live lessons and facilitated lessons with quizzes</p></div>
+        <button className="btn-primary" onClick={() => setShowAdd(true)}><Icon name="plus" size={14}/>Schedule Session</button>
+      </div>
+
+      {loading ? <div style={{ textAlign: "center", padding: 40 }}><span className="spinner"/></div> : (
+        <>
+          <p style={{ fontSize: 12, color: T.whiteDim, textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 600, marginBottom: 12 }}>Upcoming</p>
+          {upcoming.length === 0 ? <div className="empty-state"><h3>No upcoming sessions</h3><p>Schedule your next lesson</p></div> : upcoming.map(s => <SessionRow key={s.id} s={s}/>)}
+          {past.length > 0 && (
+            <>
+              <p style={{ fontSize: 12, color: T.whiteDim, textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 600, margin: "24px 0 12px" }}>Past Sessions</p>
+              <div style={{ opacity: .55 }}>{past.map(s => <SessionRow key={s.id} s={s}/>)}</div>
+            </>
+          )}
+        </>
+      )}
+
+      {showAdd && (
+        <div className="modal-overlay" onClick={() => setShowAdd(false)}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 22 }}>
+              <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>Schedule Session</h2>
+              <button onClick={() => setShowAdd(false)} style={{ background: "none", border: "none", color: T.whiteDim, cursor: "pointer" }}><Icon name="close" size={20}/></button>
+            </div>
+            <div className="col">
+              <div className="input-group"><label>Title</label><input placeholder="e.g. Mathematics: Calculus Review" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}/></div>
+              <div className="grid-2">
+                <div className="input-group"><label>Date</label><input type="date" value={form.session_date} onChange={e => setForm(p => ({ ...p, session_date: e.target.value }))}/></div>
+                <div className="input-group"><label>Time</label><input type="time" value={form.session_time} onChange={e => setForm(p => ({ ...p, session_time: e.target.value }))}/></div>
+              </div>
+              <div className="grid-2">
+                <div className="input-group"><label>Subject</label>
+                  <select value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))}>
+                    {["Mathematics", "Physics", "Chemistry"].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="input-group"><label>Session Type</label>
+                  <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
+                    <option value="live">🎥 Live Lesson (MS Teams)</option>
+                    <option value="facilitated">🎬 Facilitated Lesson (Video + Quiz)</option>
+                  </select>
+                </div>
+              </div>
+
+              {form.type === "live" && (
+                <div className="input-group"><label>MS Teams Link</label><input placeholder="https://teams.microsoft.com/l/meetup-join/..." value={form.teams_link} onChange={e => setForm(p => ({ ...p, teams_link: e.target.value }))}/></div>
+              )}
+
+              {form.type === "facilitated" && (
+                <>
+                  <div className="input-group"><label>Video Link (Google Drive or YouTube)</label><input placeholder="https://drive.google.com/..." value={form.video_link} onChange={e => setForm(p => ({ ...p, video_link: e.target.value }))}/></div>
+                  <div className="grid-2">
+                    <div className="input-group"><label>Video Duration (minutes)</label><input type="number" min="1" placeholder="e.g. 30" value={form.video_duration} onChange={e => setForm(p => ({ ...p, video_duration: e.target.value }))}/></div>
+                    <div className="input-group"><label>Linked Quiz (optional)</label>
+                      <select value={form.quiz_test_id} onChange={e => setForm(p => ({ ...p, quiz_test_id: e.target.value }))}>
+                        <option value="">No quiz</option>
+                        {(tests || []).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="input-group"><label>Description (optional)</label><textarea rows={2} placeholder="Brief description of what this lesson covers..." value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}/></div>
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn-ghost" onClick={() => setShowAdd(false)} style={{ flex: 1 }}>Cancel</button>
+                <button className="btn-primary" onClick={handleAdd} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>{saving ? <span className="spinner"/> : "Schedule"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── STUDENT SCHEDULE — with facilitated lesson entry ────────────────────────
+const StudentSchedule = ({ token, userEmail, subject }) => {
+  const { data: sessions } = useDB(token, "sessions", `?subject=eq.${subject}&order=session_date,session_time`, [subject]);
+  const [taking, setTaking] = useState(null);
+  const today = new Date().toISOString().split("T")[0];
+  const cfg = SUBJECT_CONFIG[subject] || SUBJECT_CONFIG.Mathematics;
+
+  if (taking) return <FacilitatedLesson session={taking} token={token} userEmail={userEmail} onBack={() => setTaking(null)}/>;
+
+  const upcoming = (sessions || []).filter(s => s.session_date >= today);
+  const past     = (sessions || []).filter(s => s.session_date <  today);
+
+  return (
+    <div>
+      <h3 className="display" style={{ fontSize: 17, fontWeight: 600, marginBottom: 18 }}>Schedule</h3>
+      {upcoming.length === 0 && past.length === 0
+        ? <div className="empty-state"><h3>No sessions yet</h3><p>Your tutor will schedule lessons here</p></div>
+        : <>
+          {upcoming.length > 0 && (
+            <>
+              <p style={{ fontSize: 11, color: T.whiteDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1.5px", marginBottom: 10 }}>Upcoming</p>
+              {upcoming.map(s => {
+                const isFac = s.type === "facilitated";
+                return (
+                  <div key={s.id} className="glass" style={{ padding: 18, marginBottom: 10, display: "flex", gap: 14, alignItems: "center", borderLeft: `3px solid ${cfg.color}` }}>
+                    <div style={{ textAlign: "center", minWidth: 50 }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: cfg.color, lineHeight: 1 }}>{s.session_date?.split("-")[2]}</div>
+                      <div style={{ fontSize: 10, color: T.whiteDim, textTransform: "uppercase" }}>{new Date(s.session_date + "T12:00").toLocaleString("default", { month: "short" })}</div>
+                    </div>
+                    <div style={{ width: 1, height: 34, background: T.glassBorder }}/>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500, marginBottom: 3 }}>{s.title}</div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: T.whiteDim }}>⏰ {s.session_time}</span>
+                        <span className={`badge ${isFac ? "badge-green" : "badge-teal"}`}>{isFac ? "🎬 Facilitated" : "🎥 Live"}</span>
+                      </div>
+                    </div>
+                    {isFac
+                      ? <button className="btn-primary" style={{ fontSize: 13, padding: "8px 14px" }} onClick={() => setTaking(s)}>Start Lesson →</button>
+                      : s.teams_link && <a href={s.teams_link} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration: "none", fontSize: 13, padding: "8px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}><Icon name="teams" size={13}/>Join</a>
+                    }
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {past.length > 0 && (
+            <>
+              <p style={{ fontSize: 11, color: T.whiteDim, fontWeight: 600, textTransform: "uppercase", letterSpacing: "1.5px", margin: "20px 0 10px" }}>Past Sessions</p>
+              <div style={{ opacity: .55 }}>
+                {past.reverse().map(s => (
+                  <div key={s.id} className="glass" style={{ padding: "13px 18px", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
+                    <span style={{ fontSize: 13, color: T.whiteDim, minWidth: 80 }}>{s.session_date}</span>
+                    <span style={{ flex: 1, fontSize: 14 }}>{s.title}</span>
+                    <span className={`badge ${s.type === "facilitated" ? "badge-green" : "badge-teal"}`}>{s.type === "facilitated" ? "Facilitated" : "Live"}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      }
+    </div>
+  );
+};
+
+// ─── FULL SCRIPT VIEW ─────────────────────────────────────────────────────────
+const FullScriptView = ({ submission, test, token, onBack }) => {
+  const { data: questions } = useDB(token, "questions", `?test_id=eq.${test.id}&order=order_index`);
+  const qs = questions || [];
+
+  return (
+    <div className="animate-in" style={{ maxWidth: 800, margin: "0 auto", padding: "24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+        <button className="btn-ghost" onClick={onBack} style={{ padding: "7px 14px", fontSize: 13 }}>← Back to Grades</button>
+        <div>
+          <h2 className="display" style={{ fontSize: 20, fontWeight: 700 }}>{test?.title} — Full Script</h2>
+          <p style={{ color: T.whiteDim, fontSize: 13 }}>Score: <strong style={{ color: submission.score >= 75 ? T.success : submission.score >= 50 ? T.warning : T.danger }}>{submission.score}%</strong></p>
+        </div>
+      </div>
+
+      {submission.feedback && (
+        <div style={{ padding: "16px 20px", background: T.tealGlow, border: `1px solid ${T.glassBorder}`, borderRadius: 12, marginBottom: 24 }}>
+          <div style={{ fontSize: 11, color: T.teal, fontWeight: 600, marginBottom: 4 }}>OVERALL TUTOR FEEDBACK</div>
+          <p style={{ fontSize: 14, color: T.white, lineHeight: 1.7 }}>{submission.feedback}</p>
+        </div>
+      )}
+
+      <div className="col">
+        {qs.map((q, i) => {
+          const studentAns = submission.answers?.[q.id];
+          const isAuto     = q.type === "mcq" || q.type === "true_false";
+          const isCorrect  = isAuto && studentAns === q.correct_answer;
+          const qFeedback  = submission.question_marks?.[q.id + "_feedback"];
+          const marksGiven = submission.question_marks?.[q.id];
+
+          return (
+            <div key={q.id} className="glass" style={{ padding: 24, borderLeft: `3px solid ${isAuto ? (isCorrect ? T.success : T.danger) : T.whiteDim}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>Q{i + 1}</span>
+                  <span className="badge badge-teal">{q.marks || 1} mark{(q.marks || 1) !== 1 ? "s" : ""}</span>
+                  {isAuto && <span style={{ color: isCorrect ? T.success : T.danger, fontSize: 13, fontWeight: 600 }}>{isCorrect ? "✓ Correct" : "✕ Incorrect"}</span>}
+                  {!isAuto && marksGiven !== undefined && <span style={{ fontSize: 13, color: T.whiteDim }}>{marksGiven}/{q.marks || 1} marks</span>}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 15, lineHeight: 1.75, marginBottom: 16 }}><RichContent content={q.content}/></div>
+
+              {/* Student's answer */}
+              <div style={{ padding: "10px 14px", background: "rgba(255,255,255,.04)", borderRadius: 8, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: T.whiteDim, marginBottom: 4 }}>YOUR ANSWER</div>
+                <div style={{ fontSize: 14 }}>
+                  {q.type === "mcq" && studentAns !== undefined
+                    ? <RichContent content={(q.options || [])[Number(studentAns)] || "No answer"}/>
+                    : studentAns !== undefined ? String(studentAns) : <span style={{ color: T.whiteDim }}>No answer provided</span>
+                  }
+                </div>
+              </div>
+
+              {/* Correct answer for auto-marked */}
+              {isAuto && !isCorrect && (
+                <div style={{ padding: "10px 14px", background: "rgba(34,197,94,.06)", borderRadius: 8, marginBottom: 10, border: "1px solid rgba(34,197,94,.2)" }}>
+                  <div style={{ fontSize: 11, color: T.success, marginBottom: 4 }}>CORRECT ANSWER</div>
+                  <div style={{ fontSize: 14 }}>
+                    {q.type === "mcq"
+                      ? <RichContent content={(q.options || [])[Number(q.correct_answer)] || q.correct_answer}/>
+                      : q.correct_answer
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* Per-question feedback */}
+              {qFeedback && (
+                <div style={{ padding: "10px 14px", background: "rgba(0,212,200,.06)", borderRadius: 8, border: `1px solid ${T.glassBorder}` }}>
+                  <div style={{ fontSize: 11, color: T.teal, fontWeight: 600, marginBottom: 4 }}>TUTOR FEEDBACK</div>
+                  <p style={{ fontSize: 13, color: T.whiteDim, lineHeight: 1.6 }}>{qFeedback}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── STUDENT GRADES — with View Script button ────────────────────────────────
+const StudentGrades = ({ token, userEmail, subject }) => {
+  const { data: submissions } = useDB(token, "submissions", `?student_email=eq.${encodeURIComponent(userEmail)}&status=eq.released&order=submitted_at.desc`);
+  const { data: tests }       = useDB(token, "tests", `?subject=eq.${subject}`);
+  const [viewingScript, setViewingScript] = useState(null);
+
+  const getTest = (id) => (tests || []).find(t => t.id === id);
+  const subs = (submissions || []).filter(s => getTest(s.test_id)?.subject === subject);
+  const avg  = subs.length > 0 ? Math.round(subs.reduce((a, s) => a + (s.score || 0), 0) / subs.length) : null;
+
+  if (viewingScript) {
+    const test = getTest(viewingScript.test_id);
+    return <FullScriptView submission={viewingScript} test={test} token={token} onBack={() => setViewingScript(null)}/>;
+  }
+
+  return (
+    <div>
+      <h3 className="display" style={{ fontSize: 17, fontWeight: 600, marginBottom: 18 }}>My Grades</h3>
+      {avg !== null && (
+        <div className="glass" style={{ padding: 22, marginBottom: 20, display: "flex", alignItems: "center", gap: 20 }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 48, fontWeight: 700, color: avg >= 75 ? T.success : avg >= 50 ? T.warning : T.danger, lineHeight: 1 }}>{avg}%</div>
+            <div style={{ fontSize: 12, color: T.whiteDim, marginTop: 4 }}>Average</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="progress-bar" style={{ height: 10 }}>
+              <div className="progress-fill" style={{ width: `${avg}%`, background: `linear-gradient(90deg,${avg >= 75 ? T.success : avg >= 50 ? T.warning : T.danger},${avg >= 75 ? T.success : avg >= 50 ? T.warning : T.danger}99)` }}/>
+            </div>
+            <div style={{ fontSize: 12, color: T.whiteDim, marginTop: 8 }}>{subs.length} test{subs.length !== 1 ? "s" : ""} completed</div>
+          </div>
+        </div>
+      )}
+      {subs.length === 0
+        ? <div className="empty-state"><h3>No grades yet</h3><p>Results appear here after your tutor releases them</p></div>
+        : <div className="col">
+          {subs.map(sub => {
+            const test = getTest(sub.test_id);
+            return (
+              <div key={sub.id} className="glass" style={{ padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, marginBottom: 4 }}>{test?.title || "Test"}</div>
+                    <div style={{ fontSize: 12, color: T.whiteDim }}>{sub.submitted_at?.split("T")[0]}</div>
+                    {sub.feedback && <div style={{ fontSize: 13, color: T.whiteDim, marginTop: 6, fontStyle: "italic", lineHeight: 1.5 }}>"{sub.feedback}"</div>}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: sub.score >= 75 ? T.success : sub.score >= 50 ? T.warning : T.danger, marginBottom: 8 }}>{sub.score}%</div>
+                    <button className="btn-ghost" style={{ padding: "6px 14px", fontSize: 12 }} onClick={() => setViewingScript(sub)}>View Script →</button>
                   </div>
                 </div>
               </div>
@@ -2800,18 +3275,595 @@ const StudentGrades = ({ token, userEmail, subject }) => {
     </div>
   );
 };
+
+// ─── MARKING INTERFACE — with per-question feedback ──────────────────────────
+const MarkingInterface = ({ test, token, showToast, onClose }) => {
+  const { data: submissions, loading, reload } = useDB(token, "submissions", `?test_id=eq.${test.id}&order=submitted_at`);
+  const { data: questions } = useDB(token, "questions", `?test_id=eq.${test.id}&order=order_index`);
+  const [selected,  setSelected]  = useState(null);
+  const [qMarks,    setQMarks]    = useState({});
+  const [qFeedback, setQFeedback] = useState({});
+  const [feedback,  setFeedback]  = useState("");
+  const [saving,    setSaving]    = useState(false);
+  const totalMarks = (questions || []).reduce((s, q) => s + (q.marks || 1), 0);
+
+  const handleSaveMark = async () => {
+    const awarded = (questions || []).reduce((s, q) => {
+      if (q.type === "mcq" || q.type === "true_false") return s + (selected.answers?.[q.id] === q.correct_answer ? (q.marks || 1) : 0);
+      return s + (Number(qMarks[q.id]) || 0);
+    }, 0);
+    const score = Math.round((awarded / totalMarks) * 100);
+    const questionMarksWithFeedback = {};
+    (questions || []).forEach(q => {
+      if (qMarks[q.id] !== undefined) questionMarksWithFeedback[q.id] = qMarks[q.id];
+      if (qFeedback[q.id]) questionMarksWithFeedback[q.id + "_feedback"] = qFeedback[q.id];
+    });
+    setSaving(true);
+    try {
+      const t = await sb.from(token, "submissions");
+      await t.update({ score, feedback, status: "marked", question_marks: questionMarksWithFeedback }, `?id=eq.${selected.id}`);
+      showToast(`Marked: ${score}%`, "success");
+      reload();
+      setSelected(null);
+    } catch(e) { showToast(e.message, "error"); }
+    setSaving(false);
+  };
+
+  const releaseOne = async (id) => {
+    try { const t = await sb.from(token, "submissions"); await t.update({ status: "released" }, `?id=eq.${id}`); showToast("Released", "success"); reload(); }
+    catch(e) { showToast(e.message, "error"); }
+  };
+
+  const releaseAll = async () => {
+    try { const t = await sb.from(token, "submissions"); await t.update({ status: "released" }, `?test_id=eq.${test.id}&status=eq.marked`); showToast("All results released", "success"); reload(); }
+    catch(e) { showToast(e.message, "error"); }
+  };
+
+  const markedCount = (submissions || []).filter(s => s.status === "marked" || s.status === "released").length;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.navy, zIndex: 500, overflowY: "auto" }}>
+      <div style={{ maxWidth: 920, margin: "0 auto", padding: 28 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+          <button className="btn-ghost" onClick={onClose} style={{ padding: "8px 14px", fontSize: 13 }}>← Back</button>
+          <div style={{ flex: 1 }}>
+            <h1 className="display" style={{ fontSize: 22, fontWeight: 700 }}>Marking: {test.title}</h1>
+            <p style={{ color: T.whiteDim, fontSize: 13 }}>{(submissions || []).length} submissions · {markedCount} marked</p>
+          </div>
+          {(submissions || []).some(s => s.status === "marked") && (
+            <button className="btn-success" onClick={releaseAll}>Release All Results</button>
+          )}
+        </div>
+
+        {selected ? (
+          <div className="animate-in">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 className="display" style={{ fontSize: 18 }}>Marking: {selected.student_email}</h2>
+              <button className="btn-ghost" onClick={() => setSelected(null)}>← All Submissions</button>
+            </div>
+            <div className="col">
+              {(questions || []).map((q, i) => {
+                const ans     = selected.answers?.[q.id];
+                const isAuto  = q.type === "mcq" || q.type === "true_false";
+                const correct = isAuto && ans === q.correct_answer;
+                return (
+                  <div key={q.id} className="glass" style={{ padding: 22 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>Q{i + 1} <span style={{ fontWeight: 400, color: T.whiteDim }}>({q.marks || 1} mark{(q.marks || 1) !== 1 ? "s" : ""})</span></div>
+                      {isAuto && <span style={{ color: correct ? T.success : T.danger, fontWeight: 600, fontSize: 13 }}>{correct ? "✓ Correct" : "✕ Incorrect"}</span>}
+                    </div>
+                    <div style={{ fontSize: 14, marginBottom: 12, lineHeight: 1.7 }}><RichContent content={q.content}/></div>
+                    <div style={{ padding: "10px 14px", background: "rgba(255,255,255,.04)", borderRadius: 8, marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, color: T.whiteDim, marginBottom: 4 }}>STUDENT'S ANSWER</div>
+                      <div style={{ fontSize: 14 }}>
+                        {q.type === "mcq" && ans !== undefined
+                          ? <RichContent content={(q.options || [])[Number(ans)] || "No answer"}/>
+                          : ans !== undefined ? String(ans) : <span style={{ color: T.whiteDim }}>No answer</span>
+                        }
+                      </div>
+                    </div>
+                    {(q.type === "short" || q.type === "long") && q.correct_answer && (
+                      <div style={{ padding: "10px 14px", background: "rgba(34,197,94,.06)", borderRadius: 8, marginBottom: 10, border: "1px solid rgba(34,197,94,.2)" }}>
+                        <div style={{ fontSize: 11, color: T.success, marginBottom: 4 }}>MODEL ANSWER</div>
+                        <div style={{ fontSize: 13, color: T.whiteDim }}>{q.correct_answer}</div>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <label style={{ margin: 0, textTransform: "none", letterSpacing: 0, fontSize: 13, whiteSpace: "nowrap" }}>Marks:</label>
+                        <input type="number" min="0" max={q.marks || 1}
+                          value={isAuto ? (correct ? q.marks || 1 : 0) : (qMarks[q.id] ?? "")}
+                          readOnly={isAuto}
+                          onChange={e => !isAuto && setQMarks(p => ({ ...p, [q.id]: e.target.value }))}
+                          style={{ width: 64, textAlign: "center", opacity: isAuto ? .6 : 1 }}/>
+                        <span style={{ fontSize: 13, color: T.whiteDim }}>/ {q.marks || 1}</span>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <input placeholder="Feedback for this question (optional)..." value={qFeedback[q.id] || ""} onChange={e => setQFeedback(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 13 }}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="input-group">
+                <label>Overall Feedback to Student</label>
+                <textarea rows={4} placeholder="Write overall feedback for this student..." value={feedback} onChange={e => setFeedback(e.target.value)}/>
+              </div>
+              <button className="btn-primary" onClick={handleSaveMark} disabled={saving} style={{ justifyContent: "center" }}>
+                {saving ? <span className="spinner"/> : "Save & Mark Complete"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          loading ? <div style={{ textAlign: "center", padding: 40 }}><span className="spinner"/></div> :
+          (submissions || []).length === 0 ? <div className="empty-state"><h3>No submissions yet</h3></div> : (
+            <div className="col">
+              {submissions.map(sub => (
+                <div key={sub.id} className="glass" style={{ padding: 20, display: "flex", alignItems: "center", gap: 14 }}>
+                  <Avatar name={sub.student_email} size={38}/>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, marginBottom: 4 }}>{sub.student_email}</div>
+                    <div style={{ fontSize: 12, color: T.whiteDim }}>Submitted: {sub.submitted_at?.split("T")[0]}</div>
+                  </div>
+                  {sub.score !== null && <span style={{ fontSize: 20, fontWeight: 700, color: sub.score >= 75 ? T.success : sub.score >= 50 ? T.warning : T.danger }}>{sub.score}%</span>}
+                  <span className={`badge ${sub.status === "released" ? "badge-green" : sub.status === "marked" ? "badge-teal" : "badge-orange"}`}>{sub.status}</span>
+                  <button className="btn-ghost" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => { setSelected(sub); setQMarks({}); setQFeedback({}); setFeedback(sub.feedback || ""); }}>
+                    {sub.status === "submitted" ? "Mark" : "Review"}
+                  </button>
+                  {sub.status === "marked" && <button className="btn-success" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => releaseOne(sub.id)}>Release</button>}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── TEST PREVIEW (tutor) ─────────────────────────────────────────────────────
+const TestPreview = ({ test, token, onClose }) => {
+  const { data: questions, loading } = useDB(token, "questions", `?test_id=eq.${test.id}&order=order_index`);
+  const [currentQ, setCurrentQ] = useState(0);
+  const qs = questions || [];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: T.navy, zIndex: 500, overflowY: "auto" }}>
+      <div style={{ background: T.accent, padding: "10px 24px", display: "flex", alignItems: "center", gap: 12, fontSize: 13, fontWeight: 600, color: T.navy }}>
+        <Icon name="eye" size={15}/>PREVIEW MODE — Students see this view
+        <div style={{ flex: 1 }}/>
+        <button onClick={onClose} style={{ background: T.navy, color: T.white, border: "none", borderRadius: 6, padding: "4px 14px", cursor: "pointer", fontSize: 12 }}>✕ Close Preview</button>
+      </div>
+      <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px" }}>
+        {loading ? <div style={{ textAlign: "center", padding: 40 }}><span className="spinner"/></div> :
+         qs.length === 0 ? (
+          <div className="empty-state">
+            <h3>No questions yet</h3>
+            <p>Add questions in the Question Bank first</p>
+            <button className="btn-ghost" onClick={onClose} style={{ marginTop: 12 }}>Close Preview</button>
+          </div>
+         ) : (
+          <>
+            <div style={{ padding: "14px 0", borderBottom: `1px solid ${T.glassBorder}`, marginBottom: 24 }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>{test.title}</div>
+              <div style={{ fontSize: 12, color: T.whiteDim, marginTop: 2 }}>
+                {qs.length} questions · {qs.reduce((s, q) => s + (q.marks || 1), 0)} marks total
+                {test.time_limit && ` · ${test.time_limit} min time limit`}
+              </div>
+              <div className="progress-bar" style={{ marginTop: 10 }}>
+                <div className="progress-fill" style={{ width: `${((currentQ + 1) / qs.length) * 100}%` }}/>
+              </div>
+            </div>
+            {qs[currentQ] && (
+              <div className="glass" style={{ padding: 28, marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+                  <span style={{ width: 32, height: 32, borderRadius: "50%", background: T.tealGlow, border: `1px solid ${T.teal}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: T.teal }}>{currentQ + 1}</span>
+                  <span className="badge badge-teal">{qs[currentQ].marks || 1} mark{(qs[currentQ].marks || 1) !== 1 ? "s" : ""}</span>
+                </div>
+                <div style={{ fontSize: 16, lineHeight: 1.8, marginBottom: 24 }}><RichContent content={qs[currentQ].content}/></div>
+                {qs[currentQ].type === "mcq" && (
+                  <div className="col" style={{ gap: 10 }}>
+                    {(qs[currentQ].options || []).filter(o => o).map((opt, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 18px", borderRadius: 10, border: `1px solid ${T.glassBorder}`, background: "rgba(255,255,255,.02)", cursor: "not-allowed", opacity: .85 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${T.whiteDim}`, flexShrink: 0 }}/>
+                        <span style={{ color: T.whiteDim }}><RichContent content={opt}/></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {qs[currentQ].type === "true_false" && (
+                  <div style={{ display: "flex", gap: 12 }}>
+                    {["True", "False"].map(v => <div key={v} style={{ flex: 1, padding: 15, borderRadius: 10, textAlign: "center", fontWeight: 600, border: `1px solid ${T.glassBorder}`, color: T.whiteDim, cursor: "not-allowed" }}>{v}</div>)}
+                  </div>
+                )}
+                {qs[currentQ].type === "short" && <input disabled placeholder="Student types answer here..." style={{ opacity: .6, cursor: "not-allowed" }}/>}
+                {qs[currentQ].type === "long"  && <textarea disabled rows={5} placeholder="Student writes answer here..." style={{ opacity: .6, cursor: "not-allowed" }}/>}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button className="btn-ghost" onClick={() => setCurrentQ(p => Math.max(0, p - 1))} disabled={currentQ === 0}>← Previous</button>
+              <div style={{ display: "flex", gap: 5 }}>
+                {qs.map((_, i) => (
+                  <button key={i} onClick={() => setCurrentQ(i)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${i === currentQ ? T.teal : T.glassBorder}`, background: i === currentQ ? T.tealGlow : "transparent", color: i === currentQ ? T.teal : T.whiteDim, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{i + 1}</button>
+                ))}
+              </div>
+              <button className="btn-primary" onClick={() => setCurrentQ(p => Math.min(qs.length - 1, p + 1))} disabled={currentQ === qs.length - 1}>Next →</button>
+            </div>
+          </>
+         )}
+      </div>
+    </div>
+  );
+};
+
+// ─── TESTS MANAGER UPDATE — with preview button ───────────────────────────────
+const TestsManagerV2 = ({ token, showToast, onMark }) => {
+  const { data: tests, loading, reload } = useDB(token, "tests", "?order=created_at.desc");
+  const [showCreate,     setShowCreate]     = useState(false);
+  const [filterSubject,  setFilterSubject]  = useState("all");
+  const [previewingTest, setPreviewingTest] = useState(null);
+  const [form, setForm] = useState({ title: "", subject: "Mathematics", due_date: "", attempts_allowed: 1, marking_mode: "manual", show_results_immediately: false, time_limit: "" });
+  const [saving, setSaving] = useState(false);
+  const filtered = (tests || []).filter(t => filterSubject === "all" || t.subject === filterSubject);
+
+  const handleCreate = async () => {
+    if (!form.title || !form.due_date) { showToast("Title and due date required", "error"); return; }
+    setSaving(true);
+    try {
+      const t = await sb.from(token, "tests");
+      await t.insert({ ...form, status: "draft", time_limit: form.time_limit ? Number(form.time_limit) : null });
+      showToast("Test created", "success"); setShowCreate(false);
+      setForm({ title: "", subject: "Mathematics", due_date: "", attempts_allowed: 1, marking_mode: "manual", show_results_immediately: false, time_limit: "" });
+      reload();
+    } catch(e) { showToast(e.message, "error"); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    try { const t = await sb.from(token, "tests"); await t.delete(`?id=eq.${id}`); showToast("Deleted", "info"); reload(); }
+    catch(e) { showToast(e.message, "error"); }
+  };
+
+  const setStatus = async (id, status) => {
+    try { const t = await sb.from(token, "tests"); await t.update({ status }, `?id=eq.${id}`); showToast(`Test ${status}`, "success"); reload(); }
+    catch(e) { showToast(e.message, "error"); }
+  };
+
+  if (previewingTest) return <TestPreview test={previewingTest} token={token} onClose={() => setPreviewingTest(null)}/>;
+
+  return (
+    <div className="animate-in">
+      <div className="section-header">
+        <div><h1 className="display section-title">Tests & Assignments</h1><p className="section-sub">Create, manage and mark assessments</p></div>
+        <button className="btn-primary" onClick={() => setShowCreate(true)}><Icon name="plus" size={14}/>Create Test</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {["all", "Mathematics", "Physics", "Chemistry"].map(f => (
+          <button key={f} className={`chip-filter ${filterSubject === f ? "active" : ""}`} onClick={() => setFilterSubject(f)}>{f === "all" ? "All" : f}</button>
+        ))}
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40 }}><span className="spinner"/></div> :
+       filtered.length === 0 ? <div className="empty-state"><h3>No tests yet</h3><button className="btn-primary" onClick={() => setShowCreate(true)}>Create Test</button></div> : (
+        <div className="col">
+          {filtered.map(t => (
+            <div key={t.id} className="glass" style={{ padding: 20, display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>{t.title}</span>
+                  <span className={`badge ${t.status === "active" ? "badge-green" : t.status === "closed" ? "badge-gray" : "badge-teal"}`}>{t.status}</span>
+                  <span className="badge badge-orange" style={{ fontSize: 10 }}>{t.marking_mode}</span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <span className={`tag ${subjectTag(t.subject)}`}>{t.subject}</span>
+                  <span style={{ fontSize: 12, color: T.whiteDim }}>Due: {t.due_date}</span>
+                  <span style={{ fontSize: 12, color: T.whiteDim }}>{t.attempts_allowed === 99 ? "Unlimited" : t.attempts_allowed} attempt{t.attempts_allowed !== 1 ? "s" : ""}</span>
+                  {t.time_limit && <span style={{ fontSize: 12, color: T.accent }}>⏱ {t.time_limit} min</span>}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn-ghost" style={{ padding: "7px 12px", fontSize: 12 }} onClick={() => setPreviewingTest(t)}><Icon name="eye" size={13}/>Preview</button>
+                {t.status === "draft"  && <button className="btn-success" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setStatus(t.id, "active")}><Icon name="check" size={13}/>Publish</button>}
+                {t.status === "active" && <button className="btn-ghost"   style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setStatus(t.id, "closed")}>Close</button>}
+                <button className="btn-ghost" style={{ padding: "7px 13px", fontSize: 12, color: T.accent, borderColor: "rgba(255,107,53,.3)" }} onClick={() => onMark && onMark(t)}><Icon name="eye" size={13}/>Mark</button>
+                <button className="btn-danger" style={{ padding: "7px 10px" }} onClick={() => del(t.id)}><Icon name="trash" size={14}/></button>
+              </div>
+            </div>
+          ))}
+        </div>
+       )}
+      {showCreate && (
+        <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 22 }}>
+              <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>Create Test</h2>
+              <button onClick={() => setShowCreate(false)} style={{ background: "none", border: "none", color: T.whiteDim, cursor: "pointer" }}><Icon name="close" size={20}/></button>
+            </div>
+            <div className="col">
+              <div className="input-group"><label>Test Title</label><input placeholder="e.g. Functions & Graphs Test 1" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}/></div>
+              <div className="grid-2">
+                <div className="input-group"><label>Subject</label>
+                  <select value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))}>
+                    {["Mathematics", "Physics", "Chemistry"].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="input-group"><label>Due Date</label><input type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}/></div>
+              </div>
+              <div className="grid-2">
+                <div className="input-group"><label>Attempts Allowed</label>
+                  <select value={form.attempts_allowed} onChange={e => setForm(p => ({ ...p, attempts_allowed: Number(e.target.value) }))}>
+                    <option value={1}>1 attempt</option><option value={2}>2 attempts</option><option value={3}>3 attempts</option><option value={99}>Unlimited</option>
+                  </select>
+                </div>
+                <div className="input-group"><label>Time Limit (minutes, optional)</label>
+                  <input type="number" min="5" max="300" placeholder="e.g. 60 — blank = no limit" value={form.time_limit} onChange={e => setForm(p => ({ ...p, time_limit: e.target.value }))}/>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="input-group"><label>Marking Mode</label>
+                  <select value={form.marking_mode} onChange={e => setForm(p => ({ ...p, marking_mode: e.target.value }))}>
+                    <option value="manual">Manual (I mark it)</option>
+                    <option value="auto">Auto-mark</option>
+                    <option value="mixed">Mixed (both)</option>
+                  </select>
+                </div>
+                {form.marking_mode !== "manual" && (
+                  <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 9, textTransform: "none", letterSpacing: 0, fontSize: 14, fontWeight: 400 }}>
+                      <input type="checkbox" style={{ width: "auto" }} checked={form.show_results_immediately} onChange={e => setForm(p => ({ ...p, show_results_immediately: e.target.checked }))}/>
+                      Show results immediately
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div style={{ background: T.tealGlow, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: T.teal, display: "flex", gap: 8 }}>
+                <Icon name="info" size={15}/>After creating, go to <strong>Question Bank</strong> to add questions. Use <strong>Preview</strong> to check before publishing.
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn-ghost" onClick={() => setShowCreate(false)} style={{ flex: 1 }}>Cancel</button>
+                <button className="btn-primary" onClick={handleCreate} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>{saving ? <span className="spinner"/> : "Create Test"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── PAST STUDENTS ────────────────────────────────────────────────────────────
+const PastStudents = ({ token, showToast }) => {
+  const { data: removed, loading, reload } = useDB(token, "profiles", "?role=eq.removed&order=name");
+
+  const reactivate = async (email, name) => {
+    try {
+      const t = await sb.from(token, "profiles");
+      await t.update({ role: "student" }, `?email=eq.${encodeURIComponent(email)}`);
+      showToast(`${name} reactivated`, "success");
+      reload();
+    } catch(e) { showToast(e.message, "error"); }
+  };
+
+  return (
+    <div className="animate-in">
+      <div className="section-header">
+        <div><h1 className="display section-title">Past Students</h1><p className="section-sub">Reactivate former students to restore their access</p></div>
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40 }}><span className="spinner"/></div> :
+       (removed || []).length === 0 ? <div className="empty-state"><h3>No past students</h3><p>Removed students will appear here</p></div> : (
+        <div className="glass" style={{ overflow: "hidden" }}>
+          <table>
+            <thead><tr><th>Student</th><th>Email</th><th>Previous Subjects</th><th>Actions</th></tr></thead>
+            <tbody>
+              {removed.map(s => (
+                <tr key={s.email}>
+                  <td><div style={{ display: "flex", alignItems: "center", gap: 10 }}><Avatar name={s.name} size={34}/><span style={{ fontWeight: 500 }}>{s.name}</span></div></td>
+                  <td style={{ color: T.whiteDim }}>{s.email}</td>
+                  <td><div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{(s.subjects || []).map(sub => <span key={sub} className={`tag ${subjectTag(sub)}`}>{sub}</span>)}</div></td>
+                  <td><button className="btn-success" style={{ padding: "6px 14px", fontSize: 12 }} onClick={() => reactivate(s.email, s.name)}>Reactivate</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+       )}
+    </div>
+  );
+};
+
+// ─── SETTINGS PAGE — with admin controls and password change ─────────────────
+const SettingsPage = ({ token, showToast, user }) => {
+  const { data: tutors, loading, reload } = useDB(token, "profiles", "?role=in.(tutor,admin)");
+  const [newEmail,    setNewEmail]    = useState("");
+  const [newRole,     setNewRole]     = useState("tutor");
+  const [newTab,      setNewTab]      = useState("");
+  const [customTabs,  setCustomTabs]  = useState([]);
+  const [pwForm,      setPwForm]      = useState({ current: "", next: "", confirm: "" });
+  const [pwSaving,    setPwSaving]    = useState(false);
+  const [pwMsg,       setPwMsg]       = useState(null);
+
+  const isAdmin = user?.role === "admin";
+
+  const addTutor = async () => {
+    if (!newEmail) return;
+    try {
+      const t = await sb.from(token, "profiles");
+      await t.upsert({ email: newEmail.trim(), role: newRole, name: newEmail.split("@")[0], subjects: ["Mathematics", "Physics", "Chemistry"] });
+      showToast(`${newRole} access granted`, "success"); setNewEmail(""); reload();
+    } catch(e) { showToast(e.message, "error"); }
+  };
+
+  const removeTutor = async (email) => {
+    if (email === user.email) { showToast("Cannot remove yourself", "error"); return; }
+    try {
+      const t = await sb.from(token, "profiles");
+      await t.update({ role: "student" }, `?email=eq.${encodeURIComponent(email)}`);
+      showToast("Access removed", "info"); reload();
+    } catch(e) { showToast(e.message, "error"); }
+  };
+
+  const changePassword = async () => {
+    if (!pwForm.next || !pwForm.confirm) { setPwMsg({ type: "error", text: "Fill all fields" }); return; }
+    if (pwForm.next !== pwForm.confirm)  { setPwMsg({ type: "error", text: "Passwords don't match" }); return; }
+    if (pwForm.next.length < 6)          { setPwMsg({ type: "error", text: "Password must be at least 6 characters" }); return; }
+    setPwSaving(true);
+    try {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwForm.next }),
+      });
+      if (!r.ok) throw new Error("Password update failed");
+      setPwMsg({ type: "success", text: "Password changed successfully!" });
+      setPwForm({ current: "", next: "", confirm: "" });
+    } catch(e) { setPwMsg({ type: "error", text: e.message }); }
+    setPwSaving(false);
+  };
+
+  return (
+    <div className="animate-in">
+      <h1 className="display section-title" style={{ marginBottom: 4 }}>Settings</h1>
+      <p className="section-sub" style={{ marginBottom: 28 }}>Platform configuration and access control</p>
+      <div className="col">
+
+        {/* Tutor / Admin Access — admin only */}
+        {isAdmin && (
+          <div className="glass" style={{ padding: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}><Icon name="shield" size={18}/><h3 className="display" style={{ fontSize: 16, fontWeight: 600 }}>Tutor & Admin Access</h3></div>
+            <p style={{ color: T.whiteDim, fontSize: 13, marginBottom: 18 }}>Manage who can access the Tutor and Admin portals</p>
+            <div style={{ display: "flex", gap: 9, marginBottom: 14 }}>
+              <input placeholder="Email address..." value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && addTutor()}/>
+              <select value={newRole} onChange={e => setNewRole(e.target.value)} style={{ width: "auto", minWidth: 100 }}>
+                <option value="tutor">Tutor</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button className="btn-primary" onClick={addTutor}>Add</button>
+            </div>
+            {loading ? <div style={{ color: T.whiteDim, fontSize: 13 }}>Loading...</div> :
+             (tutors || []).map(t => (
+              <div key={t.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(0,212,200,.05)", borderRadius: 8, border: `1px solid ${T.glassBorder}`, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Avatar name={t.name} size={28}/>
+                  <div>
+                    <span style={{ fontSize: 14 }}>{t.email}</span>
+                    {t.email === user.email && <span className="badge badge-teal" style={{ marginLeft: 6 }}>You</span>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span className={`badge ${t.role === "admin" ? "badge-orange" : "badge-teal"}`}>{t.role}</span>
+                  <button className="btn-danger" style={{ padding: "5px 11px", fontSize: 12 }} onClick={() => removeTutor(t.email)}>Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Student Tabs */}
+        <div className="glass" style={{ padding: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}><Icon name="dashboard" size={18}/><h3 className="display" style={{ fontSize: 16, fontWeight: 600 }}>Student Subject Tabs</h3></div>
+          <p style={{ color: T.whiteDim, fontSize: 13, marginBottom: 18 }}>Manage the tabs students see inside each subject</p>
+          <div style={{ display: "flex", gap: 9, marginBottom: 14 }}>
+            <input placeholder="New tab name..." value={newTab} onChange={e => setNewTab(e.target.value)}/>
+            <button className="btn-primary" onClick={() => { if (newTab.trim()) { setCustomTabs(p => [...p, { id: `c-${Date.now()}`, label: newTab.trim() }]); setNewTab(""); showToast("Tab added", "success"); } }}>Add Tab</button>
+          </div>
+          {DEFAULT_TABS.map(t => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "rgba(255,255,255,.03)", borderRadius: 8, border: `1px solid ${T.glassBorder}`, marginBottom: 6 }}>
+              <Icon name={t.icon} size={14}/><span style={{ flex: 1, fontSize: 14 }}>{t.label}</span><span className="badge badge-gray">Default</span>
+            </div>
+          ))}
+          {customTabs.map(t => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "rgba(255,255,255,.03)", borderRadius: 8, border: `1px solid ${T.glassBorder}`, marginBottom: 6 }}>
+              <span style={{ flex: 1, fontSize: 14 }}>{t.label}</span>
+              <button className="btn-danger" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => setCustomTabs(p => p.filter(x => x.id !== t.id))}>Remove</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Change Password */}
+        <div className="glass" style={{ padding: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}><Icon name="key" size={18}/><h3 className="display" style={{ fontSize: 16, fontWeight: 600 }}>Change Password</h3></div>
+          <p style={{ color: T.whiteDim, fontSize: 13, marginBottom: 18 }}>Update your login password</p>
+          <div className="col" style={{ maxWidth: 400 }}>
+            <div className="input-group"><label>New Password</label><input type="password" placeholder="New password (min 6 chars)" value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))}/></div>
+            <div className="input-group"><label>Confirm New Password</label><input type="password" placeholder="Confirm new password" value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))}/></div>
+            {pwMsg && <div style={{ padding: "10px 14px", borderRadius: 8, fontSize: 13, background: pwMsg.type === "success" ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)", color: pwMsg.type === "success" ? T.success : T.danger, border: `1px solid ${pwMsg.type === "success" ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.3)"}` }}>{pwMsg.text}</div>}
+            <button className="btn-primary" onClick={changePassword} disabled={pwSaving} style={{ justifyContent: "center" }}>{pwSaving ? <span className="spinner"/> : "Change Password"}</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+// ─── UPDATED TUTOR SIDEBAR — with support and past students ──────────────────
+const TutorSidebar = ({ active, onNav, onLogout, onPreview, user }) => {
+  const isAdmin = user?.role === "admin";
+  const nav = [
+    { id:"dashboard",     label:"Dashboard",           icon:"dashboard"  },
+    { id:"students",      label:"Students",            icon:"students"   },
+    { id:"tests",         label:"Tests & Assignments", icon:"tests"      },
+    { id:"materials",     label:"Materials",           icon:"materials"  },
+    { id:"analytics",     label:"Analytics",           icon:"analytics"  },
+    { id:"announcements", label:"Announcements",       icon:"announce"   },
+    { id:"schedule",      label:"Schedule",            icon:"schedule"   },
+    { id:"videos",        label:"Video Library",       icon:"video"      },
+    { id:"evaluations",   label:"Evaluations",         icon:"eval"       },
+    { id:"quotes",        label:"Motivational Quotes", icon:"quote"      },
+    { id:"questionbank",  label:"Question Bank",       icon:"bank"       },
+    { id:"paststudents",  label:"Past Students",       icon:"refresh"    },
+    ...(isAdmin ? [{ id:"support", label:"Support Tickets", icon:"eval" }] : []),
+    { id:"settings",      label:"Settings",            icon:"settings"   },
+  ];
+  return (
+    <div style={{ width:238, background:T.navyMid, borderRight:`1px solid ${T.glassBorder}`, display:"flex", flexDirection:"column", height:"100vh", position:"sticky", top:0, flexShrink:0 }}>
+      <div style={{ padding:"22px 18px 18px", borderBottom:`1px solid ${T.glassBorder}` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+          <Icon name="logo" size={22}/>
+          <span className="display" style={{ fontSize:19, fontWeight:700 }}>Prove<span style={{ color:T.teal }}>It!</span></span>
+        </div>
+        <div style={{ fontSize:10, color:T.whiteDim, letterSpacing:"2px", textTransform:"uppercase", marginTop:3, marginLeft:31 }}>
+          {isAdmin ? "Admin Portal" : "Tutor Portal"}
+        </div>
+      </div>
+      <nav style={{ flex:1, overflowY:"auto", padding:"10px" }}>
+        {nav.map(item => (
+          <div key={item.id} className={`sidebar-link ${active===item.id?"active":""}`} onClick={() => onNav(item.id)}>
+            <Icon name={item.icon} size={15}/><span>{item.label}</span>
+          </div>
+        ))}
+      </nav>
+      <div style={{ padding:"10px", borderTop:`1px solid ${T.glassBorder}` }}>
+        <div style={{ padding:"8px 14px", marginBottom:4, display:"flex", alignItems:"center", gap:10 }}>
+          <Avatar name={user?.name} size={28}/>
+          <div style={{ fontSize:12, lineHeight:1.3, overflow:"hidden" }}>
+            <div style={{ fontWeight:600, color:T.white, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user?.name}</div>
+            <div style={{ color:T.whiteDim, fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user?.email}</div>
+          </div>
+        </div>
+        <div className="sidebar-link" onClick={onPreview} style={{ color:T.accent }}>
+          <Icon name="eye" size={15}/><span>Student Preview</span>
+        </div>
+        <div className="sidebar-link" onClick={onLogout}>
+          <Icon name="logout" size={15}/><span>Sign Out</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── TUTOR APP SHELL ──────────────────────────────────────────────────────────
 const TutorApp = ({ user, onLogout, onPreview }) => {
-  const [active, setActive] = useState("dashboard");
-  const [markingTest, setMarkingTest] = useState(null);
+  const [active,       setActive]       = useState("dashboard");
+  const [markingTest,  setMarkingTest]  = useState(null);
   const { toast, show } = useToast();
   const p = { token:user.token, showToast:show, user };
 
-  if(markingTest) return <MarkingInterface test={markingTest} token={user.token} showToast={show} onClose={()=>setMarkingTest(null)}/>;
+  if (markingTest) return <MarkingInterface test={markingTest} token={user.token} showToast={show} onClose={() => setMarkingTest(null)}/>;
 
   const pages = {
     dashboard:     <TutorDashboard {...p} onNav={setActive}/>,
     students:      <StudentManagement {...p}/>,
-    tests:         <TestsManager {...p} onMark={setMarkingTest}/>,
+    tests:         <TestsManagerV2 {...p} onMark={setMarkingTest}/>,
     materials:     <MaterialsManager {...p}/>,
     analytics:     <Analytics {...p}/>,
     announcements: <AnnouncementsManager {...p}/>,
@@ -2820,6 +3872,8 @@ const TutorApp = ({ user, onLogout, onPreview }) => {
     evaluations:   <EvaluationsManager {...p}/>,
     quotes:        <QuotesManager {...p}/>,
     questionbank:  <QuestionBankPage {...p}/>,
+    paststudents:  <PastStudents {...p}/>,
+    support:       <SupportDashboard {...p}/>,
     settings:      <SettingsPage {...p}/>,
   };
 
@@ -2827,114 +3881,112 @@ const TutorApp = ({ user, onLogout, onPreview }) => {
     <div style={{ display:"flex", minHeight:"100vh" }}>
       <TutorSidebar active={active} onNav={setActive} onLogout={onLogout} onPreview={onPreview} user={user}/>
       <main style={{ flex:1, padding:"34px 38px", overflowY:"auto", maxWidth:"calc(100vw - 238px)" }}>
-        {pages[active]||pages.dashboard}
+        {pages[active] || pages.dashboard}
       </main>
       <Toast toast={toast}/>
     </div>
   );
 };
 
+// ─── STUDENT APP SHELL ────────────────────────────────────────────────────────
 const StudentApp = ({ user, onLogout, token }) => {
   const [selectedSubject, setSelectedSubject] = useState(null);
-  const [activeTab, setActiveTab] = useState("schedule");
-  const { data:announcements } = useDB(token,"announcements","?order=created_at.desc&limit=6");
-  const { data:sessions } = useDB(token,"sessions", selectedSubject?`?subject=eq.${selectedSubject}&order=session_date,session_time`:"", [selectedSubject]);
-  const { data:videos   } = useDB(token,"videos",   selectedSubject?`?subject=eq.${selectedSubject}&order=created_at.desc`:"",       [selectedSubject]);
-  const subjects = user.subjects||[];
-  const today    = new Date().toISOString().split("T")[0];
+  const [activeTab,       setActiveTab]       = useState("schedule");
+  const { data:announcements } = useDB(token, "announcements", "?order=created_at.desc&limit=6");
+  const { data:videos }        = useDB(token, "videos", selectedSubject ? `?subject=eq.${selectedSubject}&order=created_at.desc` : "", [selectedSubject]);
+  const subjects = user.subjects || [];
 
   const renderTab = () => {
-    const cfg = SUBJECT_CONFIG[selectedSubject]||SUBJECT_CONFIG.Mathematics;
-    switch(activeTab){
-      case "schedule": return (
-        <div>
-          <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Upcoming Sessions</h3>
-          {(sessions||[]).filter(s=>s.session_date>=today).length===0
-            ?<div className="empty-state"><h3>No upcoming sessions</h3><p>Check back later</p></div>
-            :(sessions||[]).filter(s=>s.session_date>=today).map(s=>(
-              <div key={s.id} className="glass" style={{ padding:18,marginBottom:10,display:"flex",gap:14,alignItems:"center",borderLeft:`3px solid ${cfg.color}` }}>
-                <div style={{ textAlign:"center",minWidth:50 }}>
-                  <div style={{ fontSize:22,fontWeight:700,color:cfg.color,lineHeight:1 }}>{s.session_date?.split("-")[2]}</div>
-                  <div style={{ fontSize:10,color:T.whiteDim,textTransform:"uppercase" }}>{new Date(s.session_date+"T12:00").toLocaleString("default",{month:"short"})}</div>
-                </div>
-                <div style={{ width:1,height:34,background:T.glassBorder }}/>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:500,marginBottom:3 }}>{s.title}</div>
-                  <div style={{ fontSize:12,color:T.whiteDim }}>⏰ {s.session_time}</div>
-                </div>
-                {s.teams_link&&<a href={s.teams_link} target="_blank" rel="noreferrer" className="btn-primary" style={{ textDecoration:"none",fontSize:13,padding:"8px 14px",display:"inline-flex",alignItems:"center",gap:6 }}><Icon name="teams" size={13}/>Join</a>}
-              </div>
-            ))}
-        </div>
-      );
+    const cfg = SUBJECT_CONFIG[selectedSubject] || SUBJECT_CONFIG.Mathematics;
+    switch(activeTab) {
+      case "schedule":    return <StudentSchedule token={token} userEmail={user.email} subject={selectedSubject}/>;
       case "materials":   return <StudentMaterials token={token} subject={selectedSubject}/>;
       case "grades":      return <StudentGrades token={token} userEmail={user.email} subject={selectedSubject}/>;
       case "tests":       return <StudentTestsList token={token} userEmail={user.email} subject={selectedSubject}/>;
       case "videos":      return (
         <div>
-          <h3 className="display" style={{ fontSize:17,fontWeight:600,marginBottom:18 }}>Recorded Lessons</h3>
+          <h3 className="display" style={{ fontSize:17, fontWeight:600, marginBottom:18 }}>Recorded Lessons</h3>
           {(videos||[]).length===0
-            ?<div className="empty-state"><h3>No recordings yet</h3><p>Recorded lessons will appear here</p></div>
-            :videos.map(v=>(
-              <div key={v.id} className="glass" style={{ padding:18,marginBottom:10,display:"flex",gap:14,alignItems:"center" }}>
+            ? <div className="empty-state"><h3>No recordings yet</h3><p>Recorded lessons will appear here</p></div>
+            : (videos||[]).map(v=>(
+              <div key={v.id} className="glass" style={{ padding:18, marginBottom:10, display:"flex", gap:14, alignItems:"center" }}>
                 <div style={{ color:cfg.color }}><Icon name="video" size={22}/></div>
-                <div style={{ flex:1 }}><div style={{ fontWeight:500 }}>{v.title}</div><div style={{ fontSize:12,color:T.whiteDim }}>{v.session_date}{v.duration&&` · ${v.duration}`}</div></div>
-                <a href={v.link} target="_blank" rel="noreferrer" className="btn-ghost" style={{ textDecoration:"none",fontSize:13,padding:"7px 14px" }}>Watch →</a>
+                <div style={{ flex:1 }}><div style={{ fontWeight:500 }}>{v.title}</div><div style={{ fontSize:12, color:T.whiteDim }}>{v.session_date}{v.duration&&` · ${v.duration}`}</div></div>
+                <a href={v.link} target="_blank" rel="noreferrer" className="btn-ghost" style={{ textDecoration:"none", fontSize:13, padding:"7px 14px" }}>Watch →</a>
               </div>
-            ))}
+            ))
+          }
         </div>
       );
       case "evaluations": return <StudentEvaluations token={token} userEmail={user.email} subject={selectedSubject}/>;
-      default: return <div style={{ color:T.whiteDim }}>Coming soon</div>;
+      case "support":     return <SupportTab user={user} token={token}/>;
+      default:            return <div style={{ color:T.whiteDim }}>Coming soon</div>;
     }
   };
 
+  // All subject tabs including support
+  const allTabs = [
+    ...DEFAULT_TABS,
+    { id:"support", label:"Support", icon:"eval" },
+  ];
+
   return (
     <div style={{ minHeight:"100vh" }}>
-      <div style={{ height:58,background:T.navyMid,borderBottom:`1px solid ${T.glassBorder}`,display:"flex",alignItems:"center",padding:"0 24px",gap:14 }}>
+      {/* Top nav */}
+      <div style={{ height:58, background:T.navyMid, borderBottom:`1px solid ${T.glassBorder}`, display:"flex", alignItems:"center", padding:"0 24px", gap:14 }}>
         <Icon name="logo" size={20}/>
-        <span className="display" style={{ fontSize:17,fontWeight:700 }}>Prove<span style={{ color:T.teal }}>It!</span></span>
-        {selectedSubject&&<button onClick={()=>{setSelectedSubject(null);setActiveTab("schedule");}} className="btn-ghost" style={{ padding:"5px 13px",fontSize:12,marginLeft:6 }}>← Subjects</button>}
+        <span className="display" style={{ fontSize:17, fontWeight:700 }}>Prove<span style={{ color:T.teal }}>It!</span></span>
+        {selectedSubject && (
+          <button onClick={()=>{ setSelectedSubject(null); setActiveTab("schedule"); }} className="btn-ghost" style={{ padding:"5px 13px", fontSize:12, marginLeft:6 }}>← Subjects</button>
+        )}
         <div style={{ flex:1 }}/>
+        <NotificationBell token={token} userEmail={user.email}/>
         <Avatar name={user.name} size={30}/>
-        <span style={{ fontSize:13,fontWeight:500 }}>{user.name}</span>
-        <button onClick={onLogout} className="btn-ghost" style={{ padding:"5px 11px",fontSize:12 }}><Icon name="logout" size={13}/>Sign Out</button>
+        <span style={{ fontSize:13, fontWeight:500 }}>{user.name}</span>
+        <button onClick={onLogout} className="btn-ghost" style={{ padding:"5px 11px", fontSize:12 }}><Icon name="logout" size={13}/>Sign Out</button>
       </div>
 
       {!selectedSubject ? (
         <div style={{ padding:"44px 38px" }} className="animate-in">
-          <h1 className="display" style={{ fontSize:27,fontWeight:700,marginBottom:4 }}>Welcome back, {user.name?.split(" ")[0]} 👋</h1>
-          <p style={{ color:T.whiteDim,marginBottom:36 }}>Select a subject to get started</p>
-          {subjects.length===0
-            ?<div className="empty-state"><h3>No subjects yet</h3><p>Your tutor hasn't enrolled you yet</p></div>
-            :(
-              <div style={{ display:"flex",gap:18,flexWrap:"wrap",marginBottom:44 }}>
-                {subjects.map(subject=>{
-                  const cfg=SUBJECT_CONFIG[subject];
+          <h1 className="display" style={{ fontSize:27, fontWeight:700, marginBottom:4 }}>Welcome back, {user.name?.split(" ")[0]} 👋</h1>
+          <p style={{ color:T.whiteDim, marginBottom:28 }}>Select a subject to get started</p>
+
+          {/* Home alerts — active tests + upcoming sessions */}
+          <StudentHomeAlerts token={token} subjects={subjects}/>
+
+          {subjects.length === 0
+            ? <div className="empty-state"><h3>No subjects yet</h3><p>Your tutor hasn't enrolled you yet</p></div>
+            : (
+              <div style={{ display:"flex", gap:18, flexWrap:"wrap", marginBottom:44 }}>
+                {subjects.map(subject => {
+                  const cfg = SUBJECT_CONFIG[subject];
                   return (
                     <div key={subject} onClick={()=>setSelectedSubject(subject)}
-                      style={{ width:270,padding:30,borderRadius:20,cursor:"pointer",background:cfg.bg,border:`1px solid ${cfg.border}`,transition:"all .25s" }}
-                      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-4px)";e.currentTarget.style.boxShadow=`0 18px 36px ${cfg.bg}`;}}
-                      onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
-                      <div style={{ fontSize:38,marginBottom:16 }}>{cfg.emoji}</div>
-                      <h2 className="display" style={{ fontSize:21,fontWeight:700,color:cfg.color,marginBottom:10 }}>{subject}</h2>
-                      <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
-                        {DEFAULT_TABS.slice(0,4).map(t=><span key={t.id} style={{ fontSize:10,color:cfg.color,opacity:.7,background:`${cfg.color}15`,padding:"3px 8px",borderRadius:4 }}>{t.label}</span>)}
+                      style={{ width:270, padding:30, borderRadius:20, cursor:"pointer", background:cfg.bg, border:`1px solid ${cfg.border}`, transition:"all .25s" }}
+                      onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-4px)"; e.currentTarget.style.boxShadow=`0 18px 36px ${cfg.bg}`; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow="none"; }}>
+                      <div style={{ fontSize:38, marginBottom:16 }}>{cfg.emoji}</div>
+                      <h2 className="display" style={{ fontSize:21, fontWeight:700, color:cfg.color, marginBottom:10 }}>{subject}</h2>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {DEFAULT_TABS.slice(0,4).map(t=><span key={t.id} style={{ fontSize:10, color:cfg.color, opacity:.7, background:`${cfg.color}15`, padding:"3px 8px", borderRadius:4 }}>{t.label}</span>)}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-          {(announcements||[]).length>0 && (
+            )
+          }
+
+          {/* Announcements */}
+          {(announcements||[]).length > 0 && (
             <div>
-              <h3 className="display" style={{ fontSize:15,fontWeight:600,marginBottom:14 }}>Latest Announcements</h3>
+              <h3 className="display" style={{ fontSize:15, fontWeight:600, marginBottom:14 }}>Latest Announcements</h3>
               <div className="col">
                 {announcements.filter(a=>a.subject==="all"||(user.subjects||[]).includes(a.subject)).slice(0,3).map(a=>(
-                  <div key={a.id} className="glass" style={{ padding:18,borderLeft:`3px solid ${a.subject==="all"?T.teal:SUBJECT_CONFIG[a.subject]?.color||T.teal}` }}>
-                    {a.pinned&&<span style={{ fontSize:11,color:T.accent,fontWeight:600,display:"block",marginBottom:4 }}>📌 PINNED</span>}
-                    <div style={{ fontWeight:500,marginBottom:4 }}>{a.title}</div>
-                    <p style={{ fontSize:13,color:T.whiteDim,lineHeight:1.6 }}>{a.body}</p>
+                  <div key={a.id} className="glass" style={{ padding:18, borderLeft:`3px solid ${a.subject==="all"?T.teal:SUBJECT_CONFIG[a.subject]?.color||T.teal}` }}>
+                    {a.pinned && <span style={{ fontSize:11, color:T.accent, fontWeight:600, display:"block", marginBottom:4 }}>📌 PINNED</span>}
+                    <div style={{ fontWeight:500, marginBottom:4 }}>{a.title}</div>
+                    <p style={{ fontSize:13, color:T.whiteDim, lineHeight:1.6 }}>{a.body}</p>
                   </div>
                 ))}
               </div>
@@ -2943,18 +3995,18 @@ const StudentApp = ({ user, onLogout, token }) => {
         </div>
       ) : (
         <div className="animate-in">
-          <div style={{ padding:"22px 28px 0",borderBottom:`1px solid ${T.glassBorder}` }}>
-            <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:16 }}>
+          <div style={{ padding:"22px 28px 0", borderBottom:`1px solid ${T.glassBorder}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
               <span style={{ fontSize:30 }}>{SUBJECT_CONFIG[selectedSubject].emoji}</span>
-              <h2 className="display" style={{ fontSize:22,fontWeight:700,color:SUBJECT_CONFIG[selectedSubject].color }}>{selectedSubject}</h2>
+              <h2 className="display" style={{ fontSize:22, fontWeight:700, color:SUBJECT_CONFIG[selectedSubject].color }}>{selectedSubject}</h2>
             </div>
-            <div style={{ display:"flex",gap:2,overflowX:"auto",borderBottom:`1px solid ${T.glassBorder}` }}>
-              {DEFAULT_TABS.map(tab=>{
-                const cfg=SUBJECT_CONFIG[selectedSubject];
-                const isActive=activeTab===tab.id;
+            <div style={{ display:"flex", gap:2, overflowX:"auto", borderBottom:`1px solid ${T.glassBorder}` }}>
+              {allTabs.map(tab => {
+                const cfg = SUBJECT_CONFIG[selectedSubject];
+                const isActive = activeTab === tab.id;
                 return (
                   <button key={tab.id} className="tab-btn" onClick={()=>setActiveTab(tab.id)}
-                    style={{ background:isActive?cfg.bg:"transparent",color:isActive?cfg.color:T.whiteDim,borderColor:isActive?cfg.color:"transparent",borderBottomColor:"transparent",marginBottom:isActive?"-1px":"0" }}>
+                    style={{ background:isActive?cfg.bg:"transparent", color:isActive?cfg.color:T.whiteDim, borderColor:isActive?cfg.color:"transparent", borderBottomColor:"transparent", marginBottom:isActive?"-1px":"0" }}>
                     <Icon name={tab.icon} size={13}/>{tab.label}
                   </button>
                 );
@@ -2968,65 +4020,108 @@ const StudentApp = ({ user, onLogout, token }) => {
   );
 };
 
+// ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen]       = useState("landing");
-  const [role,   setRole]         = useState(null);
-  const [user,   setUser]         = useState(null);
-  const [showQuote, setShowQuote] = useState(false);
-  const [activeQuote,setActiveQuote] = useState(null);
-  const [previewMode,setPreviewMode] = useState(false);
+  const [screen,       setScreen]       = useState("landing");
+  const [role,         setRole]         = useState(null);
+  const [user,         setUser]         = useState(null);
+  const [showQuote,    setShowQuote]    = useState(false);
+  const [activeQuote,  setActiveQuote]  = useState(null);
+  const [previewMode,  setPreviewMode]  = useState(false);
+  const [showWelcome,  setShowWelcome]  = useState(false);
+  const [showTour,     setShowTour]     = useState(false);
   const { toast, show } = useToast();
 
-  useEffect(()=>{
+  useEffect(() => {
     try {
       const saved = sessionStorage.getItem("proveit_user");
-      if(saved){ const u=JSON.parse(saved); setUser(u); setScreen("app"); }
-    } catch(e){}
-  },[]);
+      if (saved) { const u = JSON.parse(saved); setUser(u); setScreen("app"); }
+    } catch(e) {}
+  }, []);
 
   const handleLogin = async (userData) => {
-    try { sessionStorage.setItem("proveit_user",JSON.stringify(userData)); } catch(e){}
+    try { sessionStorage.setItem("proveit_user", JSON.stringify(userData)); } catch(e) {}
     setUser(userData);
-    if(userData.role==="student"){
+
+    if (userData.role === "student") {
+      // Check for active quote
       try {
-        const t=await sb.from(userData.token,"quotes");
-        const qs=await t.select("?active=eq.true&limit=1");
-        if(qs?.length>0){ setActiveQuote(qs[0]); setShowQuote(true); }
-      } catch(e){}
+        const t  = await sb.from(userData.token, "quotes");
+        const qs = await t.select("?active=eq.true&limit=1");
+        if (qs?.length > 0) { setActiveQuote(qs[0]); setShowQuote(true); }
+      } catch(e) {}
+
+      // Check if first login
+      try {
+        const t  = await sb.from(userData.token, "profiles");
+        const ps = await t.select(`?email=eq.${encodeURIComponent(userData.email)}`);
+        if (ps?.[0] && !ps[0].has_logged_in) {
+          // Mark as logged in
+          await t.update({ has_logged_in: true }, `?email=eq.${encodeURIComponent(userData.email)}`);
+          setShowWelcome(true);
+        }
+      } catch(e) {}
     }
+
     setScreen("app");
   };
 
   const handleLogout = async () => {
-    if(user?.token){ try { await sb.signOut(user.token); } catch(e){} }
-    try { sessionStorage.removeItem("proveit_user"); } catch(e){}
-    setUser(null); setRole(null); setScreen("landing"); setPreviewMode(false); setShowQuote(false); setActiveQuote(null);
+    if (user?.token) { try { await sb.signOut(user.token); } catch(e) {} }
+    try { sessionStorage.removeItem("proveit_user"); } catch(e) {}
+    setUser(null); setRole(null); setScreen("landing");
+    setPreviewMode(false); setShowQuote(false); setActiveQuote(null);
+    setShowWelcome(false); setShowTour(false);
+  };
+
+  const handleWelcomeContinue = (takeTour) => {
+    setShowWelcome(false);
+    if (takeTour) setShowTour(true);
   };
 
   return (
     <>
       <GlobalStyles/>
-      {showQuote&&activeQuote&&<QuoteSplash quote={{ text:activeQuote.text,author:activeQuote.author,bg:activeQuote.bg_color,textColor:activeQuote.text_color }} onDismiss={()=>setShowQuote(false)}/>}
-      {screen==="landing"&&<LandingPage onSelect={r=>{setRole(r);setScreen("login");}}/>}
-      {screen==="login"&&<LoginForm role={role} onLogin={handleLogin} onBack={()=>setScreen("landing")} showToast={show}/>}
-      {screen==="app"&&!showQuote&&user&&(
-        previewMode?(
+
+      {/* Overlays in priority order */}
+      {showQuote && activeQuote && (
+        <QuoteSplash
+          quote={{ text:activeQuote.text, author:activeQuote.author, bg:activeQuote.bg_color, textColor:activeQuote.text_color }}
+          onDismiss={() => setShowQuote(false)}
+        />
+      )}
+      {showWelcome && !showQuote && user && (
+        <WelcomeScreen user={user} onContinue={handleWelcomeContinue}/>
+      )}
+      {showTour && !showWelcome && !showQuote && (
+        <OnboardingTour onComplete={() => setShowTour(false)}/>
+      )}
+
+      {screen === "landing" && <LandingPage onSelect={r => { setRole(r); setScreen("login"); }}/>}
+
+      {screen === "login" && (
+        <LoginForm role={role} onLogin={handleLogin} onBack={() => setScreen("landing")} showToast={show}/>
+      )}
+
+      {screen === "app" && !showQuote && !showWelcome && !showTour && user && (
+        previewMode ? (
           <div>
-            <div style={{ position:"fixed",top:0,left:0,right:0,zIndex:999,background:T.accent,padding:"9px 22px",display:"flex",alignItems:"center",gap:11,fontSize:13,fontWeight:600,color:T.navy }}>
+            <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:999, background:T.accent, padding:"9px 22px", display:"flex", alignItems:"center", gap:11, fontSize:13, fontWeight:600, color:T.navy }}>
               <Icon name="eye" size={15}/>STUDENT PREVIEW — viewing as a student
               <div style={{ flex:1 }}/>
-              <button onClick={()=>setPreviewMode(false)} style={{ background:T.navy,color:T.white,border:"none",borderRadius:6,padding:"4px 14px",cursor:"pointer",fontSize:12 }}>Exit Preview</button>
+              <button onClick={() => setPreviewMode(false)} style={{ background:T.navy, color:T.white, border:"none", borderRadius:6, padding:"4px 14px", cursor:"pointer", fontSize:12 }}>Exit Preview</button>
             </div>
             <div style={{ paddingTop:40 }}>
-              <StudentApp user={{...user,name:"Sample Student",subjects:["Mathematics","Physics","Chemistry"]}} onLogout={handleLogout} token={user.token}/>
+              <StudentApp user={{ ...user, name:"Sample Student", subjects:["Mathematics","Physics","Chemistry"] }} onLogout={handleLogout} token={user.token}/>
             </div>
           </div>
-        ):user.role==="tutor"?(
-          <TutorApp user={user} onLogout={handleLogout} onPreview={()=>setPreviewMode(true)}/>
-        ):(
+        ) : user.role === "tutor" || user.role === "admin" ? (
+          <TutorApp user={user} onLogout={handleLogout} onPreview={() => setPreviewMode(true)}/>
+        ) : (
           <StudentApp user={user} onLogout={handleLogout} token={user.token}/>
         )
       )}
+
       <Toast toast={toast}/>
     </>
   );
