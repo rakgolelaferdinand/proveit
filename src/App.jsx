@@ -443,7 +443,7 @@ const PasswordResetScreen = ({ onSuccess }) => {
     setStatusMsg("");
     if (!newPassword || !confirmPassword) { setError("Please fill out both password fields."); return; }
     if (newPassword !== confirmPassword) { setError("Passwords do not match."); return; }
-    if (newPassword.length < 8) { setError("Password must be at least  characters."); return; }
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
 
     setLoading(true);
     try {
@@ -490,7 +490,7 @@ const PasswordResetScreen = ({ onSuccess }) => {
         <div className="col" style={{ gap: 16 }}>
           <div className="input-group">
             <label>New Password</label>
-            <input type="password" placeholder="Minimum 6 characters" value={newPassword} onChange={e => setNewPassword(e.target.value)} disabled={loading}/>
+            <input type="password" placeholder="Minimum 8 characters" value={newPassword} onChange={e => setNewPassword(e.target.value)} disabled={loading}/>
           </div>
           <div className="input-group">
             <label>Confirm New Password</label>
