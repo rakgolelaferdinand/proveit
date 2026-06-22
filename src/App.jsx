@@ -4043,7 +4043,46 @@ const StudentApp = ({ user, onLogout, token }) => {
   const [activeTab,       setActiveTab]       = useState("schedule");
   const { data:announcements } = useDB(token, "announcements", "?order=created_at.desc&limit=6");
   const { data:videos }        = useDB(token, "videos", selectedSubject ? `?subject=eq.${selectedSubject}&order=created_at.desc` : "", [selectedSubject]);
+  
+  // Local state for handling the embedded password update fields
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passLoading, setPassLoading] = useState(false);
+  const [passError, setPassError] = useState("");
+  const [passSuccess, setPassSuccess] = useState("");
+
   const subjects = user.subjects || [];
+
+  const handleUpdatePassword = async () => {
+    setPassError("");
+    setPassSuccess("");
+    if (!newPassword || !confirmPassword) { setPassError("Please fill out both fields."); return; }
+    if (newPassword !== confirmPassword) { setPassError("Passwords do not match."); return; }
+    if (newPassword.length < 6) { setPassError("Password must be at least 6 characters."); return; }
+
+    setPassLoading(true);
+    try {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ password: newPassword }),
+      });
+
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.msg || d.error_description || "Could not update password.");
+
+      setPassSuccess("Password updated successfully!");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (e) {
+      setPassError(e.message || "An issue occurred while changing your password.");
+    }
+    setPassLoading(false);
+  };
 
   const renderTab = () => {
     const cfg = SUBJECT_CONFIG[selectedSubject] || SUBJECT_CONFIG.Mathematics;
@@ -4089,18 +4128,59 @@ const StudentApp = ({ user, onLogout, token }) => {
           <button onClick={()=>{ setSelectedSubject(null); setActiveTab("schedule"); }} className="btn-ghost" style={{ padding:"5px 13px", fontSize:12, marginLeft:6 }}>← Subjects</button>
         )}
         <div style={{ flex:1 }}/>
+        
+        {/* Settings button placed right next to the notification bell */}
+        <button 
+          onClick={() => { setSelectedSubject(null); setActiveTab("settings"); }}
+          style={{ background: "transparent", border: "none", color: activeTab === "settings" ? T.teal : T.whiteDim, cursor: "pointer", display: "flex", alignItems: "center", padding: 6, transition: "color .2s" }}
+          title="Account Settings"
+        >
+          <Icon name="settings" size={18}/>
+        </button>
+
         <NotificationBell token={token} userEmail={user.email}/>
         <Avatar name={user.name} size={30}/>
         <span style={{ fontSize:13, fontWeight:500 }}>{user.name}</span>
         <button onClick={onLogout} className="btn-ghost" style={{ padding:"5px 11px", fontSize:12 }}><Icon name="logout" size={13}/>Sign Out</button>
       </div>
 
-      {!selectedSubject ? (
+      {/* Main Container Layout Toggling */}
+      {activeTab === "settings" && !selectedSubject ? (
+        <div style={{ padding:"44px 38px", maxWidth: 480, margin: "0 auto" }} className="animate-in">
+          <div style={{ display: "flex", justifyContent: "between", alignItems: "center", marginBottom: 24 }}>
+            <div>
+              <h1 className="display" style={{ fontSize:25, fontWeight:700, marginBottom:4 }}>Account Settings</h1>
+              <p style={{ color:T.whiteDim, fontSize:13 }}>Update your secure entry configuration below</p>
+            </div>
+            <button className="btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => setActiveTab("schedule")}>Close Settings</button>
+          </div>
+
+          <div className="glass" style={{ padding: 30 }}>
+            <h3 className="display" style={{ fontSize: 16, fontWeight: 600, marginBottom: 18 }}>Change Password</h3>
+            
+            {passError && <div style={{ background:"rgba(239,68,68,0.1)", border:`1px solid ${T.danger}`, color:T.danger, borderRadius:10, padding:"10px 14px", fontSize:13, marginBottom:16 }}>{passError}</div>}
+            {passSuccess && <div style={{ background:"rgba(34,197,94,0.1)", border:`1px solid ${T.success}`, color:T.success, borderRadius:10, padding:"10px 14px", fontSize:13, marginBottom:16 }}>{passSuccess}</div>}
+
+            <div className="col" style={{ gap: 16 }}>
+              <div className="input-group">
+                <label>New Password</label>
+                <input type="password" placeholder="Minimum 6 characters" value={newPassword} onChange={e=>setNewPassword(e.target.value)} disabled={passLoading}/>
+              </div>
+              <div className="input-group">
+                <label>Confirm New Password</label>
+                <input type="password" placeholder="Repeat new password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleUpdatePassword()} disabled={passLoading}/>
+              </div>
+              <button className="btn-primary" style={{ justifyContent:"center", marginTop:6 }} onClick={handleUpdatePassword} disabled={passLoading}>
+                {passLoading ? <span className="spinner"/> : "Update Password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : !selectedSubject ? (
         <div style={{ padding:"44px 38px" }} className="animate-in">
           <h1 className="display" style={{ fontSize:27, fontWeight:700, marginBottom:4 }}>Welcome back, {user.name?.split(" ")[0]} 👋</h1>
           <p style={{ color:T.whiteDim, marginBottom:28 }}>Select a subject to get started</p>
 
-          {/* Home alerts — active tests + upcoming sessions */}
           <StudentHomeAlerts token={token} subjects={subjects}/>
 
           {subjects.length === 0
@@ -4126,7 +4206,6 @@ const StudentApp = ({ user, onLogout, token }) => {
             )
           }
 
-          {/* Announcements */}
           {(announcements||[]).length > 0 && (
             <div>
               <h3 className="display" style={{ fontSize:15, fontWeight:600, marginBottom:14 }}>Latest Announcements</h3>
@@ -4168,7 +4247,6 @@ const StudentApp = ({ user, onLogout, token }) => {
     </div>
   );
 };
-
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [screen,       setScreen]       = useState("landing");
