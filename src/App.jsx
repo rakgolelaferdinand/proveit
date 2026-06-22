@@ -2,8 +2,85 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 
 const SUPABASE_URL = "https://ehpwkfhqlxtjzkkaokfx.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVocHdrZmhxbHh0anpra2Fva2Z4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MTQ5NjksImV4cCI6MjA5NzM5MDk2OX0.hHxdvNGc0sbdd6CS_oUOgm6o74qK3W1V9HeiaJNGyL4";
+const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+useEffect(() => {
+  const hash = window.location.hash;
+
+  if (hash.includes("type=recovery")) {
+    setIsRecoveryMode(true);
+  }
+}, []);
+const PasswordResetScreen = () => {
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const updatePassword = async () => {
+    try {
+      setLoading(true);
+
+      const accessToken = new URLSearchParams(
+        window.location.hash.substring(1)
+      ).get("access_token");
+
+      const r = await fetch(
+        `${SUPABASE_URL}/auth/v1/user`,
+        {
+          method: "PUT",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            password
+          })
+        }
+      );
+
+      const d = await r.json();
+
+      if (!r.ok) {
+        throw new Error(d.msg || d.message || "Failed");
+      }
+
+      alert("Password updated successfully!");
+
+      window.location.hash = "";
+      window.location.reload();
+
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="glass" style={{ padding: 30, maxWidth: 500, margin: "80px auto" }}>
+      <h2>Create New Password</h2>
+
+      <input
+        type="password"
+        placeholder="New password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      <button
+        className="btn-primary"
+        onClick={updatePassword}
+        disabled={loading}
+      >
+        {loading ? "Updating..." : "Update Password"}
+      </button>
+    </div>
+  );
+};
 
 const sb = {
+  if (isRecoveryMode) {
+  return <PasswordResetScreen />;
+}
   async signIn(email, password) {
     const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method: "POST",
