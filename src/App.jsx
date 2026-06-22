@@ -2677,11 +2677,11 @@ const OnboardingTour = ({ onComplete }) => {
     { emoji: "📚", title: "Your Subjects", body: "Your home screen shows the subjects you're enrolled in. Click any subject card to open it.", btn: "Got it →" },
     { emoji: "📝", title: "Tests & Assignments", body: "Inside each subject, go to the Tests tab to see active tests, past results, and missed tests. Your due dates are always visible.", btn: "Got it →" },
     { emoji: "📊", title: "Your Grades", body: "The Grades tab shows all your released results with scores and tutor feedback. You can also view your full marked script.", btn: "Got it →" },
-    { emoji: "📅", title: "Schedule", body: "The Schedule tab shows upcoming live lessons and facilitated lessons. Click Join to open your MS Teams session.", btn: "Got it →" },
+    { emoji: "📅", title: "Schedule", body: "The Schedule tab shows upcoming live lessons and facilitated lessons. Click Join to open your Google Meet/MS Teams session.", btn: "Got it →" },
     { emoji: "📁", title: "Materials", body: "Your tutor uploads notes, past papers and resources here. Everything is organised by folder and downloadable.", btn: "Got it →" },
     { emoji: "🎥", title: "Videos", body: "Missed a lesson? Watch recorded sessions here anytime. Facilitated lessons include a quiz you unlock by watching the video.", btn: "Got it →" },
     { emoji: "💬", title: "Evaluations & Support", body: "Give lesson feedback in the Evaluations tab. Need help? Use the Support tab to send a message directly to the team.", btn: "Got it →" },
-    { emoji: "🔔", title: "Notifications", body: "The bell icon at the top shows new tests, released grades, and upcoming sessions. Check it regularly so you never miss anything.", btn: "Got it →" },
+    { emoji: "🔔", title: "Notifications", body: "The bell icon at the top shows new tests, released grades, and upcoming sessions. Check it regularly so that you never miss anything.", btn: "Got it →" },
     { emoji: "🚀", title: "You're all set!", body: "That's everything. Your subjects are waiting. Work hard, stay consistent, and ProveIt! 💪", btn: "Start Learning →" },
   ];
   const s = steps[step];
