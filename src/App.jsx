@@ -605,13 +605,22 @@ const StudentManagement = ({ token, showToast }) => {
     } catch(e){showToast(e.message,"error");}
     setSaving(false);
   };
-  const handleRemove = async (email,name) => {
-    try {
-      const t=await sb.from(token,"profiles");
-      await t.update({role:"removed"},`?email=eq.${encodeURIComponent(email)}`);
-      showToast(`${name} removed`,"info");reload();
-    } catch(e){showToast(e.message,"error");}
-  };
+ const handleRemove = async (email, name) => {
+  try {
+    const t = await sb.from(token, "profiles");
+    await t.update(
+      { role: "removed" },
+      `?email=eq.${encodeURIComponent(email)}`
+    );
+
+    await emailStudentDeactivated(name, email);
+
+    showToast(`${name} removed`, "info");
+    reload();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+};
   const tog=s=>setForm(p=>({...p,subjects:p.subjects.includes(s)?p.subjects.filter(x=>x!==s):[...p.subjects,s]}));
   return (
     <div className="animate-in">
@@ -2586,6 +2595,21 @@ const emailEnrolment = (student_name, student_email, temp_password) =>
     subject: "Welcome to ProveIt!",
     message: `You have been successfully enrolled into our tutoring programme.\n\nYour login details:\nEmail: ${student_email}\nTemporary Password: ${temp_password}\n\nPlease change your password after your first login by going to Settings.`,
   });
+const emailStudentDeactivated = (student_name, student_email) =>
+  sendNotifyEmail({
+    to_email: student_email,
+    student_name,
+    subject: "Your ProveIt Account Has Been Deactivated",
+    message: `Your ProveIt student account has been deactivated and you will no longer be able to access tests, results, or platform resources.\n\nIf you believe this was done in error, please contact our support team at: help.proveit@yahoo.com.`,
+  });
+
+const emailStudentReactivated = (student_name, student_email) =>
+  sendNotifyEmail({
+    to_email: student_email,
+    student_name,
+    subject: "Welcome Back to ProveIt!",
+    message: `Your ProveIt student account has been reactivated and you may now access the platform again.\n\nFor security reasons, we strongly recommend that you change your password immediately after logging in by going to Settings.\n\nIf you experience any difficulties accessing your account, please contact our support team at: help.proveit@yahoo.com.\n\nWelcome back and best wishes for your studies.`,
+  });
 
 const emailTestPublished = (student_name, student_email, test_title, subject_name, due_date) =>
   sendNotifyEmail({
@@ -3783,14 +3807,23 @@ const TestsManagerV2 = ({ token, showToast, onMark }) => {
 const PastStudents = ({ token, showToast }) => {
   const { data: removed, loading, reload } = useDB(token, "profiles", "?role=eq.removed&order=name");
 
-  const reactivate = async (email, name) => {
-    try {
-      const t = await sb.from(token, "profiles");
-      await t.update({ role: "student" }, `?email=eq.${encodeURIComponent(email)}`);
-      showToast(`${name} reactivated`, "success");
-      reload();
-    } catch(e) { showToast(e.message, "error"); }
-  };
+const reactivate = async (email, name) => {
+  try {
+    const t = await sb.from(token, "profiles");
+
+    await t.update(
+      { role: "student" },
+      `?email=eq.${encodeURIComponent(email)}`
+    );
+
+    await emailStudentReactivated(name, email);
+
+    showToast(`${name} reactivated`, "success");
+    reload();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+};
 
   return (
     <div className="animate-in">
