@@ -4186,6 +4186,7 @@ return (
     <Toast toast={toast}/>
   </div>
 );
+};
 // ─── STUDENT APP SHELL ────────────────────────────────────────────────────────
 const StudentApp = ({ user, onLogout, token }) => {
   const [selectedSubject, setSelectedSubject] = useState(null);
