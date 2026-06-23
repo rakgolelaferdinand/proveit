@@ -172,6 +172,38 @@ const GlobalStyles = () => (
     .section-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px}
     .section-title{font-size:25px;font-weight:700;margin-bottom:3px;font-family:'Space Grotesk',sans-serif}
     .section-sub{color:#8899BB;font-size:13.5px}
+  @media (max-width:768px){
+
+  html,
+  body,
+  #root{
+    overflow-x:hidden;
+  }
+
+  .display{
+    font-size:clamp(18px,5vw,32px) !important;
+  }
+
+  .grid-4{
+    grid-template-columns:1fr !important;
+  }
+
+  .stat-card{
+    width:100%;
+  }
+
+  table{
+    display:block;
+    overflow-x:auto;
+    white-space:nowrap;
+  }
+
+  .modal,
+  .modal-lg{
+    width:95vw !important;
+    max-width:95vw !important;
+  }
+}
   `}</style>
 );
 const useToast = () => {
@@ -3978,7 +4010,15 @@ const SettingsPage = ({ token, showToast, user }) => {
 };
 
 // ─── UPDATED TUTOR SIDEBAR — with support and past students ──────────────────
-const TutorSidebar = ({ active, onNav, onLogout, onPreview, user }) => {
+const TutorSidebar = ({
+  active,
+  onNav,
+  onLogout,
+  onPreview,
+  user,
+  isMobile,
+  mobileMenuOpen
+}) => {
   const isAdmin = user?.role === "admin";
   const nav = [
     { id:"dashboard",     label:"Dashboard",           icon:"dashboard"  },
@@ -3997,7 +4037,27 @@ const TutorSidebar = ({ active, onNav, onLogout, onPreview, user }) => {
     { id:"settings",      label:"Settings",            icon:"settings"   },
   ];
   return (
-    <div style={{ width:238, background:T.navyMid, borderRight:`1px solid ${T.glassBorder}`, display:"flex", flexDirection:"column", height:"100vh", position:"sticky", top:0, flexShrink:0 }}>
+    <div
+  style={{
+    width:238,
+    background:T.navyMid,
+    borderRight:`1px solid ${T.glassBorder}`,
+    display:"flex",
+    flexDirection:"column",
+    height:"100vh",
+
+    position:isMobile ? "fixed" : "sticky",
+    top:0,
+    left:isMobile
+      ? (mobileMenuOpen ? 0 : -260)
+      : 0,
+
+    zIndex:1500,
+    flexShrink:0,
+
+    transition:"left .3s ease"
+  }}
+>
       <div style={{ padding:"22px 18px 18px", borderBottom:`1px solid ${T.glassBorder}` }}>
         <div style={{ display:"flex", alignItems:"center", gap:9 }}>
           <Icon name="logo" size={22}/>
@@ -4035,6 +4095,20 @@ const TutorSidebar = ({ active, onNav, onLogout, onPreview, user }) => {
 
 // ─── TUTOR APP SHELL ──────────────────────────────────────────────────────────
 const TutorApp = ({ user, onLogout, onPreview }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+useEffect(() => {
+  const handleResize = () => {
+    setIsMobile(window.innerWidth <= 768);
+  };
+
+  window.addEventListener("resize", handleResize);
+
+  return () => {
+    window.removeEventListener("resize", handleResize);
+  };
+}, []);
   const [active,       setActive]       = useState("dashboard");
   const [markingTest,  setMarkingTest]  = useState(null);
   const { toast, show } = useToast();
@@ -4059,17 +4133,59 @@ const TutorApp = ({ user, onLogout, onPreview }) => {
     settings:      <SettingsPage {...p}/>,
   };
 
-  return (
-    <div style={{ display:"flex", minHeight:"100vh" }}>
-      <TutorSidebar active={active} onNav={setActive} onLogout={onLogout} onPreview={onPreview} user={user}/>
-      <main style={{ flex:1, padding:"34px 38px", overflowY:"auto", maxWidth:"calc(100vw - 238px)" }}>
-        {pages[active] || pages.dashboard}
-      </main>
-      <Toast toast={toast}/>
-    </div>
-  );
-};
+return (
+  <div style={{ display:"flex", minHeight:"100vh" }}>
 
+    {isMobile && (
+      <button
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        style={{
+          position:"fixed",
+          top:15,
+          left:15,
+          zIndex:2000,
+          width:48,
+          height:48,
+          borderRadius:12,
+          border:"none",
+          cursor:"pointer",
+          background:T.teal,
+          color:"#fff",
+          fontSize:22
+        }}
+      >
+        ☰
+      </button>
+    )}
+
+    <TutorSidebar
+      active={active}
+      onNav={(page)=>{
+        setActive(page);
+        setMobileMenuOpen(false);
+      }}
+      onLogout={onLogout}
+      onPreview={onPreview}
+      user={user}
+      isMobile={isMobile}
+      mobileMenuOpen={mobileMenuOpen}
+    />
+
+    <main
+      style={{
+        flex:1,
+        padding:isMobile ? "80px 15px 20px" : "34px 38px",
+        overflowY:"auto",
+        width:"100%",
+        maxWidth:"100vw"
+      }}
+    >
+      {pages[active] || pages.dashboard}
+    </main>
+
+    <Toast toast={toast}/>
+  </div>
+);
 // ─── STUDENT APP SHELL ────────────────────────────────────────────────────────
 const StudentApp = ({ user, onLogout, token }) => {
   const [selectedSubject, setSelectedSubject] = useState(null);
