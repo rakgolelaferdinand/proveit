@@ -632,6 +632,7 @@ const StudentManagement = ({ token, showToast }) => {
       await sb.signUp(form.email.trim(),form.password);
       const t = await sb.from(token,"profiles");
       await t.upsert({ email:form.email.trim(), name:form.name, role:"student", subjects:form.subjects });
+      await emailEnrolment(form.name, form.email.trim(), form.password)
       showToast(`${form.name} added`,"success");
       setForm({name:"",email:"",password:"",subjects:[]});setShowAdd(false);reload();
     } catch(e){showToast(e.message,"error");}
