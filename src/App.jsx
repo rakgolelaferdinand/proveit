@@ -2330,70 +2330,165 @@ const QuestionBankPage = ({ token, showToast }) => {
 
 // ─── STUDENT TEST TAKER ───────────────────────────────────────────────────────
 const TestTaker = ({ test, token, userEmail, onFinish }) => {
-  const { data:questions, loading } = useDB(token,"questions",`?test_id=eq.${test.id}&order=order_index`);
-  const [answers,  setAnswers]  = useState({});
+  const { data: questions, loading } = useDB(token, "questions", `?test_id=eq.${test.id}&order=order_index`);
+  const [answers, setAnswers] = useState({});
   const [currentQ, setCurrentQ] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted,  setSubmitted]  = useState(false);
-  const [result,     setResult]     = useState(null);
-  const [timeLeft,   setTimeLeft]   = useState(test.time_limit ? test.time_limit*60 : null);
+  const [submitted, setSubmitted] = useState(false);
+  const [result, setResult] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(test.time_limit ? test.time_limit * 60 : null);
+  
+  // New States for Draft Resilience
+  const [lastSaved, setLastSaved] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("Synced"); // "Synced", "Saving...", "Error"
+  
+  const storageKey = `test_draft_${test.id}_${userEmail}`;
 
-  useEffect(()=>{
-    if(!timeLeft) return;
-    const t=setInterval(()=>setTimeLeft(p=>{ if(p<=1){clearInterval(t);handleSubmit();return 0;} return p-1; }),1000);
-    return ()=>clearInterval(t);
-  },[]);
+  // 1. On Mount: Check for and restore existing draft
+  useEffect(() => {
+    const restoreDraft = async () => {
+      // Step A: Attempt restoration from fast LocalStorage
+      const localDraft = localStorage.getItem(storageKey);
+      if (localDraft) {
+        try {
+          const parsed = JSON.parse(localDraft);
+          if (parsed && Object.keys(parsed).length > 0) {
+            setAnswers(parsed);
+            setLastSaved(new Date().toLocaleTimeString());
+            return;
+          }
+        } catch (e) {
+          console.error("Failed parsing local draft data", e);
+        }
+      }
+
+      // Step B: If local is missing, fall back to remote server draft
+      try {
+        const t = await sb.from(token, "test_drafts");
+        const { data, error } = await t.select("answers").eq("test_id", test.id).eq("student_email", userEmail).maybeSingle();
+        if (data?.answers) {
+          setAnswers(data.answers);
+          setLastSaved(new Date().toLocaleTimeString());
+        }
+      } catch (e) {
+        console.error("Could not fetch remote backup draft", e);
+      }
+    };
+
+    restoreDraft();
+  }, [questions]); // Triggered once questions are loaded to sync positions if needed
+
+  // 2. Auto-save answers to LocalStorage on state modification
+  useEffect(() => {
+    if (Object.keys(answers).length === 0) return;
+    localStorage.setItem(storageKey, JSON.stringify(answers));
+    setSaveStatus("Saving changes...");
+    
+    // Quick micro-timeout indicator update
+    const t = setTimeout(() => setSaveStatus("Saved locally"), 400);
+    return () => clearTimeout(t);
+  }, [answers]);
+
+  // 3. Cloud Auto-save to Supabase every 60 seconds
+  useEffect(() => {
+    if (Object.keys(answers).length === 0 || submitted) return;
+
+    const saveToCloud = async () => {
+      try {
+        const t = await sb.from(token, "test_drafts");
+        // Upsert drops a row if a combination key matches or creates one
+        await t.upsert({
+          test_id: test.id,
+          student_email: userEmail,
+          answers,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'test_id,student_email' });
+        
+        setLastSaved(new Date().toLocaleTimeString());
+        setSaveStatus("Synced");
+      } catch (e) {
+        console.error("Cloud auto-save interval failed (possible expired JWT)", e);
+        setSaveStatus("Offline (Saved Local)");
+      }
+    };
+
+    const interval = setInterval(saveToCloud, 60000);
+    return () => clearInterval(interval);
+  }, [answers, submitted]);
+
+  // Timer loop
+  useEffect(() => {
+    if (!timeLeft) return;
+    const t = setInterval(() => setTimeLeft(p => { if (p <= 1) { clearInterval(t); handleSubmit(); return 0; } return p - 1; }), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    const qs = questions||[];
-    const totalMarks = qs.reduce((s,q)=>s+(q.marks||1),0);
-    let autoScore=0, autoMarks=0;
-    if(test.marking_mode==="auto"||test.marking_mode==="mixed"){
-      qs.forEach(q=>{
-        if(q.type==="mcq"||q.type==="true_false"){
-          autoMarks+=q.marks||1;
-          if(answers[q.id]===q.correct_answer) autoScore+=q.marks||1;
+    const qs = questions || [];
+    const totalMarks = qs.reduce((s, q) => s + (q.marks || 1), 0);
+    let autoScore = 0, autoMarks = 0;
+    
+    if (test.marking_mode === "auto" || test.marking_mode === "mixed") {
+      qs.forEach(q => {
+        if (q.type === "mcq" || q.type === "true_false") {
+          autoMarks += q.marks || 1;
+          if (answers[q.id] === q.correct_answer) autoScore += q.marks || 1;
         }
       });
     }
-    const score = (test.marking_mode==="auto"||test.marking_mode==="mixed") && autoMarks>0
-      ? Math.round((autoScore/totalMarks)*100) : null;
+    
+    const score = (test.marking_mode === "auto" || test.marking_mode === "mixed") && autoMarks > 0
+      ? Math.round((autoScore / totalMarks) * 100) : null;
+      
     try {
-      const t=await sb.from(token,"submissions");
-      await t.insert({ test_id:test.id, student_email:userEmail, answers, score, status:test.marking_mode==="manual"?"submitted":"marked", attempt_number:1 });
-      setResult({ score, questions:qs, answers });
+      const t = await sb.from(token, "submissions");
+      await t.insert({ test_id: test.id, student_email: userEmail, answers, score, status: test.marking_mode === "manual" ? "submitted" : "marked", attempt_number: 1 });
+      
+      // 4. Clear all local cache traces and cloud drafts on true submission
+      localStorage.removeItem(storageKey);
+      try {
+        const draftTable = await sb.from(token, "test_drafts");
+        await draftTable.delete().eq("test_id", test.id).eq("student_email", userEmail);
+      } catch(err) {
+        console.error("Could not wipe server draft table entries", err);
+      }
+
+      setResult({ score, questions: qs, answers });
       setSubmitted(true);
-    } catch(e){ console.error(e); }
+    } catch (e) { 
+      console.error(e); 
+      setSaveStatus("Submit failed. Local copy safe!");
+    }
     setSubmitting(false);
   };
 
-  const fmt = s=>`${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
-  const qs = questions||[];
-  const totalMarks = qs.reduce((s,q)=>s+(q.marks||1),0);
+  const fmt = s => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  const qs = questions || [];
+  const totalMarks = qs.reduce((s, q) => s + (q.marks || 1), 0);
 
-  if(loading) return <div style={{ textAlign:"center",padding:60 }}><span className="spinner"/></div>;
+  if (loading) return <div style={{ textAlign: "center", padding: 60 }}><span className="spinner" /></div>;
 
-  if(submitted){
-    const showScore = (test.marking_mode==="auto"||test.marking_mode==="mixed") && test.show_results_immediately;
+  if (submitted) {
+    const showScore = (test.marking_mode === "auto" || test.marking_mode === "mixed") && test.show_results_immediately;
     return (
-      <div className="animate-in" style={{ maxWidth:640,margin:"0 auto",padding:"48px 24px",textAlign:"center" }}>
-        <div style={{ fontSize:60,marginBottom:16 }}>🎉</div>
-        <h2 className="display" style={{ fontSize:26,fontWeight:700,marginBottom:8 }}>Test Submitted!</h2>
-        <p style={{ color:T.whiteDim,marginBottom:32 }}>Your answers have been recorded successfully.</p>
-        {showScore && result?.score!==null && (
-          <div className="glass" style={{ padding:32,marginBottom:28 }}>
-            <div style={{ fontSize:60,fontWeight:700,color:result.score>=75?T.success:result.score>=50?T.warning:T.danger,marginBottom:8 }}>{result.score}%</div>
-            <div style={{ fontSize:14,color:T.whiteDim,marginBottom:16 }}>Your Score</div>
-            <div className="progress-bar"><div className="progress-fill" style={{ width:`${result.score}%`,background:`linear-gradient(90deg,${result.score>=75?T.success:result.score>=50?T.warning:T.danger},${result.score>=75?T.success:result.score>=50?T.warning:T.danger}99)` }}/></div>
-            {result.questions.filter(q=>q.type==="mcq"||q.type==="true_false").length>0 && (
-              <div style={{ marginTop:24,textAlign:"left" }}>
-                {result.questions.filter(q=>q.type==="mcq"||q.type==="true_false").map(q=>{
-                  const correct = result.answers[q.id]===q.correct_answer;
+      <div className="animate-in" style={{ maxWidth: 640, margin: "0 auto", padding: "48px 24px", textAlign: "center" }}>
+        <div style={{ fontSize: 60, marginBottom: 16 }}>🎉</div>
+        <h2 className="display" style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>Test Submitted!</h2>
+        <p style={{ color: T.whiteDim, marginBottom: 32 }}>Your answers have been recorded successfully.</p>
+        {showScore && result?.score !== null && (
+          <div className="glass" style={{ padding: 32, marginBottom: 28 }}>
+            <div style={{ fontSize: 60, fontWeight: 700, color: result.score >= 75 ? T.success : result.score >= 50 ? T.warning : T.danger, marginBottom: 8 }}>{result.score}%</div>
+            <div style={{ fontSize: 14, color: T.whiteDim, marginBottom: 16 }}>Your Score</div>
+            <div className="progress-bar"><div className="progress-fill" style={{ width: `${result.score}%`, background: `linear-gradient(90deg,${result.score >= 75 ? T.success : result.score >= 50 ? T.warning : T.danger},${result.score >= 75 ? T.success : result.score >= 50 ? T.warning : T.danger}99)` }} /></div>
+            {result.questions.filter(q => q.type === "mcq" || q.type === "true_false").length > 0 && (
+              <div style={{ marginTop: 24, textAlign: "left" }}>
+                {result.questions.filter(q => q.type === "mcq" || q.type === "true_false").map(q => {
+                  const correct = result.answers[q.id] === q.correct_answer;
                   return (
-                    <div key={q.id} style={{ display:"flex",gap:10,alignItems:"flex-start",marginBottom:8,padding:"10px 14px",borderRadius:8,background:correct?"rgba(34,197,94,.08)":"rgba(239,68,68,.08)",border:`1px solid ${correct?"rgba(34,197,94,.3)":"rgba(239,68,68,.3)"}`}}>
-                      <span style={{ color:correct?T.success:T.danger,fontWeight:700,fontSize:16,flexShrink:0 }}>{correct?"✓":"✕"}</span>
-                      <div style={{ fontSize:13,flex:1 }}><RichContent content={q.content}/></div>
+                    <div key={q.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8, padding: "10px 14px", borderRadius: 8, background: correct ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)", border: `1px solid ${correct ? "rgba(34,197,94,.3)" : "rgba(239,68,68,.3)"}` }}>
+                      <span style={{ color: correct ? T.success : T.danger, fontWeight: 700, fontSize: 16, flexShrink: 0 }}>{correct ? "✓" : "✕"}</span>
+                      <div style={{ fontSize: 13, flex: 1 }}><RichContent content={q.content} /></div>
                     </div>
                   );
                 })}
@@ -2402,8 +2497,8 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
           </div>
         )}
         {!showScore && (
-          <div className="glass" style={{ padding:20,marginBottom:28 }}>
-            <p style={{ color:T.whiteDim,fontSize:14 }}>{test.marking_mode==="manual"?"Your tutor will mark your test and release results soon.":"Results will be released by your tutor."}</p>
+          <div className="glass" style={{ padding: 20, marginBottom: 28 }}>
+            <p style={{ color: T.whiteDim, fontSize: 14 }}>{test.marking_mode === "manual" ? "Your tutor will mark your test and release results soon." : "Results will be released by your tutor."}</p>
           </div>
         )}
         <button className="btn-primary" onClick={onFinish}>Back to Tests</button>
@@ -2412,78 +2507,91 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
   }
 
   const q = qs[currentQ];
-  if(!q) return null;
+  if (!q) return null;
 
   return (
-    <div style={{ maxWidth:760,margin:"0 auto",padding:"0 24px 60px" }}>
+    <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 24px 60px" }}>
       {/* Sticky header */}
-      <div style={{ position:"sticky",top:0,background:T.navy,padding:"14px 0",borderBottom:`1px solid ${T.glassBorder}`,marginBottom:24,zIndex:10 }}>
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+      <div style={{ position: "sticky", top: 0, background: T.navy, padding: "14px 0", borderBottom: `1px solid ${T.glassBorder}`, marginBottom: 24, zIndex: 10 }}>
+        <div style={{ display: "flex", justifycontent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontWeight:600,fontSize:15 }}>{test.title}</div>
-            <div style={{ fontSize:12,color:T.whiteDim,marginTop:2 }}>Q{currentQ+1}/{qs.length} · {Object.keys(answers).length} answered · {totalMarks} marks</div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>{test.title}</div>
+            <div style={{ fontSize: 12, color: T.whiteDim, marginTop: 2 }}>Q{currentQ + 1}/{qs.length} · {Object.keys(answers).length} answered · {totalMarks} marks</div>
           </div>
-          <div style={{ display:"flex",gap:12,alignItems:"center" }}>
-            {timeLeft!==null && (
-              <div style={{ fontFamily:"monospace",fontSize:16,fontWeight:700,color:timeLeft<300?T.danger:T.teal,background:"rgba(0,0,0,.3)",padding:"5px 12px",borderRadius:8 }}>⏱ {fmt(timeLeft)}</div>
+          
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {/* Visible Sync & Last Saved Indicator Component */}
+            <div style={{ textalign: "right", marginRight: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: saveStatus === "Synced" ? T.success : saveStatus.includes("Saving") ? T.warning : T.whiteDim }}>
+                ● {saveStatus}
+              </div>
+              {lastSaved && (
+                <div style={{ fontSize: 10, color: T.whiteDim, marginTop: 1 }}>
+                  Cloud Saved: {lastSaved}
+                </div>
+              )}
+            </div>
+
+            {timeLeft !== null && (
+              <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: timeLeft < 300 ? T.danger : T.teal, background: "rgba(0,0,0,.3)", padding: "5px 12px", borderRadius: 8 }}>⏱ {fmt(timeLeft)}</div>
             )}
-            <button className="btn-primary" onClick={handleSubmit} disabled={submitting} style={{ padding:"8px 18px" }}>
-              {submitting?<span className="spinner"/>:"Submit Test"}
+            <button className="btn-primary" onClick={handleSubmit} disabled={submitting} style={{ padding: "8px 18px" }}>
+              {submitting ? <span className="spinner" /> : "Submit Test"}
             </button>
           </div>
         </div>
-        <div className="progress-bar" style={{ marginTop:10 }}>
-          <div className="progress-fill" style={{ width:`${((currentQ+1)/qs.length)*100}%` }}/>
+        <div className="progress-bar" style={{ marginTop: 10 }}>
+          <div className="progress-fill" style={{ width: `${((currentQ + 1) / qs.length) * 100}%` }} />
         </div>
       </div>
 
-      {/* Question */}
-      <div className="glass" style={{ padding:28,marginBottom:20 }}>
-        <div style={{ display:"flex",gap:10,marginBottom:16,alignItems:"center" }}>
-          <span style={{ width:32,height:32,borderRadius:"50%",background:T.tealGlow,border:`1px solid ${T.teal}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:T.teal,flexShrink:0 }}>{currentQ+1}</span>
-          <span className="badge badge-teal">{q.marks} mark{q.marks!==1?"s":""}</span>
-          {answers[q.id]!==undefined && <span className="badge badge-green">✓ Answered</span>}
+      {/* Question Canvas Module */}
+      <div className="glass" style={{ padding: 28, marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+          <span style={{ width: 32, height: 32, borderRadius: "50%", background: T.tealGlow, border: `1px solid ${T.teal}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: T.teal, flexShrink: 0 }}>{currentQ + 1}</span>
+          <span className="badge badge-teal">{q.marks} mark{q.marks !== 1 ? "s" : ""}</span>
+          {answers[q.id] !== undefined && <span className="badge badge-green">✓ Answered</span>}
         </div>
-        <div style={{ fontSize:16,lineHeight:1.8,marginBottom:24 }}><RichContent content={q.content}/></div>
+        <div style={{ fontSize: 16, lineheight: 1.8, marginBottom: 24 }}><RichContent content={q.content} /></div>
 
-        {q.type==="mcq" && (
-          <div className="col" style={{ gap:10 }}>
-            {(q.options||[]).filter(o=>o).map((opt,i)=>(
-              <div key={i} onClick={()=>setAnswers(p=>({...p,[q.id]:String(i)}))}
-                style={{ display:"flex",alignItems:"center",gap:12,padding:"14px 18px",borderRadius:10,cursor:"pointer",transition:"all .2s",border:`1px solid ${answers[q.id]===String(i)?T.teal:T.glassBorder}`,background:answers[q.id]===String(i)?T.tealGlow:"rgba(255,255,255,.02)" }}>
-                <div style={{ width:22,height:22,borderRadius:"50%",border:`2px solid ${answers[q.id]===String(i)?T.teal:T.whiteDim}`,background:answers[q.id]===String(i)?T.teal:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                  {answers[q.id]===String(i)&&<div style={{ width:8,height:8,borderRadius:"50%",background:T.navy }}/>}
+        {q.type === "mcq" && (
+          <div className="col" style={{ gap: 10 }}>
+            {(q.options || []).filter(o => o).map((opt, i) => (
+              <div key={i} onClick={() => setAnswers(p => ({ ...p, [q.id]: String(i) }))}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderRadius: 10, cursor: "pointer", transition: "all .2s", border: `1px solid ${answers[q.id] === String(i) ? T.teal : T.glassBorder}`, background: answers[q.id] === String(i) ? T.tealGlow : "rgba(255,255,255,.02)" }}>
+                <div style={{ width: 22, height: 22, borderRadius: "50%", border: `2px solid ${answers[q.id] === String(i) ? T.teal : T.whiteDim}`, background: answers[q.id] === String(i) ? T.teal : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {answers[q.id] === String(i) && <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.navy }} />}
                 </div>
-                <span style={{ color:answers[q.id]===String(i)?T.white:T.whiteDim }}><RichContent content={opt}/></span>
+                <span style={{ color: answers[q.id] === String(i) ? T.white : T.whiteDim }}><RichContent content={opt} /></span>
               </div>
             ))}
           </div>
         )}
 
-        {q.type==="true_false" && (
-          <div style={{ display:"flex",gap:12 }}>
-            {["True","False"].map(v=>(
-              <div key={v} onClick={()=>setAnswers(p=>({...p,[q.id]:v}))}
-                style={{ flex:1,padding:16,borderRadius:10,cursor:"pointer",textAlign:"center",fontWeight:600,fontSize:15,transition:"all .2s",border:`1px solid ${answers[q.id]===v?T.teal:T.glassBorder}`,background:answers[q.id]===v?T.tealGlow:"rgba(255,255,255,.02)",color:answers[q.id]===v?T.teal:T.whiteDim }}>
+        {q.type === "true_false" && (
+          <div style={{ display: "flex", gap: 12 }}>
+            {["True", "False"].map(v => (
+              <div key={v} onClick={() => setAnswers(p => ({ ...p, [q.id]: v }))}
+                style={{ flex: 1, padding: 16, borderRadius: 10, cursor: "pointer", textAlign: "center", fontWeight: 600, fontSize: 15, transition: "all .2s", border: `1px solid ${answers[q.id] === v ? T.teal : T.glassBorder}`, background: answers[q.id] === v ? T.tealGlow : "rgba(255,255,255,.02)", color: answers[q.id] === v ? T.teal : T.whiteDim }}>
                 {v}
               </div>
             ))}
           </div>
         )}
 
-        {q.type==="short" && <input placeholder="Type your answer here..." value={answers[q.id]||""} onChange={e=>setAnswers(p=>({...p,[q.id]:e.target.value}))} style={{ fontSize:15 }}/>}
-        {q.type==="long"  && <textarea rows={8} placeholder="Write your full answer here..." value={answers[q.id]||""} onChange={e=>setAnswers(p=>({...p,[q.id]:e.target.value}))} style={{ fontSize:15,lineHeight:1.7,resize:"vertical" }}/>}
+        {q.type === "short" && <input placeholder="Type your answer here..." value={answers[q.id] || ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 15 }} />}
+        {q.type === "long" && <textarea rows={8} placeholder="Write your full answer here..." value={answers[q.id] || ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 15, lineheight: 1.7, resize: "vertical" }} />}
       </div>
 
-      {/* Navigation */}
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-        <button className="btn-ghost" onClick={()=>setCurrentQ(p=>Math.max(0,p-1))} disabled={currentQ===0}>← Previous</button>
-        <div style={{ display:"flex",gap:5,flexWrap:"wrap",justifyContent:"center",maxWidth:420 }}>
-          {qs.map((qi,i)=>(
-            <button key={i} onClick={()=>setCurrentQ(i)} style={{ width:32,height:32,borderRadius:7,border:`1px solid ${i===currentQ?T.teal:answers[qi.id]!==undefined?T.success:T.glassBorder}`,background:i===currentQ?T.tealGlow:answers[qi.id]!==undefined?"rgba(34,197,94,.12)":"transparent",color:i===currentQ?T.teal:answers[qi.id]!==undefined?T.success:T.whiteDim,cursor:"pointer",fontSize:12,fontWeight:600 }}>{i+1}</button>
+      {/* Navigation Footer */}
+      <div style={{ display: "flex", justifycontent: "space-between", alignItems: "center" }}>
+        <button className="btn-ghost" onClick={() => setCurrentQ(p => Math.max(0, p - 1))} disabled={currentQ === 0}>← Previous</button>
+        <div style={{ display: "flex", gap: 5, flexwrap: "wrap", justifycontent: "center", maxWidth: 420 }}>
+          {qs.map((qi, i) => (
+            <button key={i} onClick={() => setCurrentQ(i)} style={{ width: 32, height: 32, borderRadius: 7, border: `1px solid ${i === currentQ ? T.teal : answers[qi.id] !== undefined ? T.success : T.glassBorder}`, background: i === currentQ ? T.tealGlow : answers[qi.id] !== undefined ? "rgba(34,197,94,.12)" : "transparent", color: i === currentQ ? T.teal : answers[qi.id] !== undefined ? T.success : T.whiteDim, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{i + 1}</button>
           ))}
         </div>
-        <button className="btn-primary" onClick={()=>setCurrentQ(p=>Math.min(qs.length-1,p+1))} disabled={currentQ===qs.length-1}>Next →</button>
+        <button className="btn-primary" onClick={() => setCurrentQ(p => Math.min(qs.length-1, p + 1))} disabled={currentQ === qs.length - 1}>Next →</button>
       </div>
     </div>
   );
