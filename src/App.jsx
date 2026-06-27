@@ -76,6 +76,43 @@ const sb = {
     };
   },
 };
+const uploadToStorage = async (token, file, path) => {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/question-images/${path}`, {
+    method: "PUT",
+    headers: {
+      apikey:         SUPABASE_ANON_KEY,
+      Authorization:  `Bearer ${token}`,
+      "Content-Type": file.type || "image/jpeg",
+    },
+    body: file,
+  });
+  if (!r.ok) {
+    const e = await r.json();
+    throw new Error(e.message || "Image upload failed");
+  }
+  return path;
+};
+
+const getSignedUrl = async (token, path) => {
+  const r = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/sign/question-images/${path}`,
+    {
+      method: "POST",
+      headers: {
+        apikey:         SUPABASE_ANON_KEY,
+        Authorization:  `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    }
+  );
+  if (!r.ok) {
+    const e = await r.json();
+    throw new Error(e.message || "Could not generate image URL");
+  }
+  const d = await r.json();
+  return `${SUPABASE_URL}${d.signedURL}`;
+};
 
 const T = {
   navy: "#0A0F1E", navyMid: "#111827", navyLight: "#1E2D4A",
@@ -268,6 +305,28 @@ const subjectTag = (s) => {
   if (!s) return "";
   const m = { Mathematics:"math", Physics:"phys", Chemistry:"chem" };
   return `tag-${m[s]||"math"}`;
+};
+const useSignedUrls = (token, paths) => {
+  const [urls,    setUrls]    = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!paths || paths.length === 0 || !token) { setUrls([]); return; }
+    let cancelled = false;
+    setLoading(true);
+    Promise.all(
+      paths.map(p =>
+        getSignedUrl(token, p)
+          .then(url => ({ path: p, url, error: null }))
+          .catch(err => ({ path: p, url: null, error: err.message }))
+      )
+    ).then(results => {
+      if (!cancelled) { setUrls(results); setLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [token, JSON.stringify(paths)]);
+
+  return { urls, loading };
 };
 
 const useDB = (token, table, filter = "", deps = []) => {
@@ -1871,6 +1930,54 @@ const RichText = ({ content }) => {
 };
 
 // ─── IMAGE UPLOAD HELPER (base64 for questions) ───────────────────────────────
+const StudentImageGallery = ({ token, paths }) => {
+  const normalised = Array.isArray(paths)
+    ? paths
+    : paths ? [paths] : [];
+
+  const { urls, loading } = useSignedUrls(token, normalised);
+
+  if (!normalised.length) return (
+    <span style={{ color: T.whiteDim, fontSize: 13 }}>No image submitted</span>
+  );
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, color: T.whiteDim, fontSize: 13 }}>
+      <span className="spinner"/> Loading images...
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+        {urls.map((item, i) => (
+          <div key={item.path} style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.glassBorder}`, background: "rgba(255,255,255,.03)" }}>
+            {item.error ? (
+              <div style={{ padding: "20px 14px", textAlign: "center", color: T.danger, fontSize: 12 }}>
+                Could not load image {i + 1}
+              </div>
+            ) : (
+              <>
+                <img
+                  src={item.url}
+                  alt={`Working ${i + 1}`}
+                  style={{ width: "100%", display: "block", maxHeight: 280, objectFit: "contain", background: "#0a0f1a" }}
+                />
+                <div style={{ padding: "6px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: T.whiteDim }}>Image {i + 1} of {urls.length}</span>
+                  <a href={item.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: T.teal }}>
+                    Full size ↗
+                  </a>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const ImageUploader = ({ onInsert }) => {
   const ref = useRef(null);
   const handleFile = (e) => {
@@ -2095,6 +2202,7 @@ const QuestionEditor = ({ testId, question, onSave, onClose, showToast }) => {
             ))}
             {form.type==="short" && <div style={{ background:"rgba(255,255,255,.05)",borderRadius:8,padding:"10px 14px",color:T.whiteDim,fontSize:13 }}>Short answer field</div>}
             {form.type==="long"  && <div style={{ background:"rgba(255,255,255,.05)",borderRadius:8,padding:"10px 14px",color:T.whiteDim,fontSize:13,minHeight:80 }}>Long answer field</div>}
+            {form.type==="image_upload" && <div style={{ background:"rgba(255,255,255,.05)",borderRadius:8,padding:"20px 14px",color:T.whiteDim,fontSize:13,textAlign:"center",border:`2px dashed ${T.glassBorder}` }}>📸 Students will upload photos of their working here (multiple images allowed)</div>}
           </div>
         ) : (
           <div className="col">
@@ -2105,12 +2213,19 @@ const QuestionEditor = ({ testId, question, onSave, onClose, showToast }) => {
                   <option value="short">Short Answer</option>
                   <option value="long">Long Answer / Essay</option>
                   <option value="true_false">True / False</option>
+                  <option value="image_upload">Image Upload (Show Working)</option>
                 </select>
               </div>
               <div className="input-group"><label>Marks</label>
                 <input type="number" min="1" max="100" value={form.marks} onChange={e=>setForm(p=>({...p,marks:Number(e.target.value)}))}/>
               </div>
             </div>
+            {form.type==="image_upload" && (
+              <div style={{ padding:"12px 14px", background:"rgba(0,212,200,.06)", borderRadius:10, border:`1px solid rgba(0,212,200,.2)`, fontSize:13, color:T.teal, display:"flex", gap:8, alignItems:"flex-start" }}>
+                <span style={{ fontSize:16, flexShrink:0 }}>📸</span>
+                <span>Students upload photos of their written working. Multiple images per question are supported. <strong style={{ color:T.white }}>Always manually marked.</strong></span>
+              </div>
+            )}
 
             {/* Toolbar */}
             <div>
@@ -2139,7 +2254,7 @@ const QuestionEditor = ({ testId, question, onSave, onClose, showToast }) => {
             <div className="input-group">
               <label>Question Content</label>
               <textarea ref={contentRef} id="question-content" rows={5}
-                placeholder="Type your question. Use $...$ for LaTeX, click symbols above, or insert an image."
+                placeholder={form.type==="image_upload" ? "Describe what working the student must show — e.g. 'Solve for x. Show all steps clearly.'" : "Type your question. Use $...$ for LaTeX, click symbols above, or insert an image."}
                 value={form.content} onChange={e=>setForm(p=>({...p,content:e.target.value}))}
                 style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13 }}/>
             </div>
@@ -2341,7 +2456,8 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
   // New States for Draft Resilience
   const [lastSaved, setLastSaved] = useState(null);
   const [saveStatus, setSaveStatus] = useState("Synced"); // "Synced", "Saving...", "Error"
-  
+  const [imgUploading, setImgUploading] = useState({}); // { [qId]: number of uploads in progress }
+  const [imgPreviews,  setImgPreviews]  = useState({}); // { [qId]: [{objectUrl, path, uploading, error}] }
   const storageKey = `test_draft_${test.id}_${userEmail}`;
 
   // 1. On Mount: Check for and restore existing draft
@@ -2462,6 +2578,68 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
     }
     setSubmitting(false);
   };
+  const handleImageSelect = async (qId, files) => {
+    if (!files || files.length === 0) return;
+    const fileArr = Array.from(files);
+    const newPreviews = fileArr.map(f => ({ objectUrl: URL.createObjectURL(f), path: null, uploading: true, error: false }));
+    setImgPreviews(p => ({ ...p, [qId]: [...(p[qId] || []), ...newPreviews] }));
+    setImgUploading(p => ({ ...p, [qId]: (p[qId] || 0) + fileArr.length }));
+    setSaveStatus("Uploading images...");
+
+    const results = await Promise.allSettled(
+      fileArr.map(async (file, i) => {
+        const ext  = file.name.split(".").pop() || "jpg";
+        const path = `submissions/${test.id}/${userEmail.replace(/[^a-zA-Z0-9]/g, "_")}/${qId}/${Date.now()}_${i}.${ext}`;
+        const storedPath = await uploadToStorage(token, file, path);
+        return { objectUrl: newPreviews[i].objectUrl, path: storedPath };
+      })
+    );
+
+    const successPaths = [];
+    results.forEach(result => {
+      if (result.status === "fulfilled") {
+        successPaths.push(result.value.path);
+        setImgPreviews(p => {
+          const updated = [...(p[qId] || [])];
+          const slot = updated.findIndex(s => s.objectUrl === result.value.objectUrl && s.uploading);
+          if (slot !== -1) updated[slot] = { ...updated[slot], path: result.value.path, uploading: false };
+          return { ...p, [qId]: updated };
+        });
+      } else {
+        setImgPreviews(p => {
+          const updated = [...(p[qId] || [])];
+          const slot = updated.findIndex(s => s.uploading && !s.path);
+          if (slot !== -1) updated[slot] = { ...updated[slot], uploading: false, error: true };
+          return { ...p, [qId]: updated };
+        });
+      }
+    });
+
+    if (successPaths.length > 0) {
+      setAnswers(p => ({ ...p, [qId]: [...(Array.isArray(p[qId]) ? p[qId] : []), ...successPaths] }));
+    }
+
+    setImgUploading(p => ({ ...p, [qId]: Math.max(0, (p[qId] || 0) - fileArr.length) }));
+    const failed = results.filter(r => r.status === "rejected").length;
+    setSaveStatus(failed > 0 ? `${failed} image(s) failed` : "Images uploaded ✓");
+    setTimeout(() => setSaveStatus("Synced"), 2500);
+  };
+
+  const removeImage = (qId, index) => {
+    setAnswers(p => {
+      const current = Array.isArray(p[qId]) ? [...p[qId]] : [];
+      current.splice(index, 1);
+      const updated = { ...p };
+      if (current.length > 0) updated[qId] = current;
+      else delete updated[qId];
+      return updated;
+    });
+    setImgPreviews(p => {
+      const updated = [...(p[qId] || [])];
+      updated.splice(index, 1);
+      return { ...p, [qId]: updated };
+    });
+  };
 
   const fmt = s => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
   const qs = questions || [];
@@ -2535,8 +2713,8 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
             {timeLeft !== null && (
               <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: timeLeft < 300 ? T.danger : T.teal, background: "rgba(0,0,0,.3)", padding: "5px 12px", borderRadius: 8 }}>⏱ {fmt(timeLeft)}</div>
             )}
-            <button className="btn-primary" onClick={handleSubmit} disabled={submitting} style={{ padding: "8px 18px" }}>
-              {submitting ? <span className="spinner" /> : "Submit Test"}
+            <button className="btn-primary" onClick={handleSubmit} disabled={submitting || Object.values(imgUploading).some(v => v > 0)} style={{ padding: "8px 18px" }}>
+              {submitting ? <span className="spinner" /> : Object.values(imgUploading).some(v => v > 0) ? "Uploading..." : "Submit Test"}
             </button>
           </div>
         </div>
@@ -2550,6 +2728,7 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
         <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
           <span style={{ width: 32, height: 32, borderRadius: "50%", background: T.tealGlow, border: `1px solid ${T.teal}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: T.teal, flexShrink: 0 }}>{currentQ + 1}</span>
           <span className="badge badge-teal">{q.marks} mark{q.marks !== 1 ? "s" : ""}</span>
+          {q.type === "image_upload" && <span className="badge badge-orange">📸 Show Working</span>}
           {answers[q.id] !== undefined && <span className="badge badge-green">✓ Answered</span>}
         </div>
         <div style={{ fontSize: 16, lineheight: 1.8, marginBottom: 24 }}><RichContent content={q.content} /></div>
@@ -2581,6 +2760,73 @@ const TestTaker = ({ test, token, userEmail, onFinish }) => {
 
         {q.type === "short" && <input placeholder="Type your answer here..." value={answers[q.id] || ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 15 }} />}
         {q.type === "long" && <textarea rows={8} placeholder="Write your full answer here..." value={answers[q.id] || ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))} style={{ fontSize: 15, lineheight: 1.7, resize: "vertical" }} />}
+
+        {q.type === "image_upload" && (
+          <div>
+            {(imgPreviews[q.id] || []).length > 0 && (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10, marginBottom:12 }}>
+                {(imgPreviews[q.id] || []).map((item, idx) => (
+                  <div key={idx} style={{ borderRadius:10, overflow:"hidden", border:`1px solid ${item.error ? T.danger : item.uploading ? T.glassBorder : T.teal}`, position:"relative", background:"rgba(255,255,255,.03)" }}>
+                    <img src={item.objectUrl} alt={`Working ${idx+1}`} style={{ width:"100%", height:120, objectFit:"contain", display:"block", background:"#0a0f1a" }}/>
+                    {item.uploading && (
+                      <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <span className="spinner"/>
+                      </div>
+                    )}
+                    {item.error && (
+                      <div style={{ position:"absolute", inset:0, background:"rgba(239,68,68,.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:T.danger, textAlign:"center", padding:8 }}>
+                        Upload failed
+                      </div>
+                    )}
+                    {!item.uploading && !item.error && (
+                      <button onClick={() => removeImage(q.id, idx)} style={{ position:"absolute", top:5, right:5, width:20, height:20, borderRadius:"50%", background:"rgba(239,68,68,.85)", border:"none", color:"#fff", cursor:"pointer", fontSize:11, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>✕</button>
+                    )}
+                    <div style={{ padding:"4px 8px", fontSize:10, color:T.whiteDim, textAlign:"center" }}>
+                      {item.uploading ? "Uploading..." : item.error ? "Failed" : `Image ${idx+1}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div
+              style={{ padding:20, borderRadius:12, border:`2px dashed ${T.glassBorder}`, background:"rgba(255,255,255,.02)", textAlign:"center", cursor:"pointer" }}
+              onClick={() => document.getElementById(`img-upload-${q.id}`).click()}
+            >
+              <input
+                id={`img-upload-${q.id}`}
+                type="file"
+                accept="image/*"
+                multiple
+                capture="environment"
+                style={{ display:"none" }}
+                onChange={e => { handleImageSelect(q.id, e.target.files); e.target.value = ""; }}
+              />
+              {imgUploading[q.id] > 0 ? (
+                <div style={{ color:T.whiteDim, fontSize:13 }}>
+                  <span className="spinner" style={{ display:"block", margin:"0 auto 8px" }}/>
+                  Uploading {imgUploading[q.id]} image{imgUploading[q.id] > 1 ? "s" : ""}...
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize:32, marginBottom:8 }}>📸</div>
+                  {(imgPreviews[q.id] || []).length > 0
+                    ? <div style={{ fontSize:13, color:T.teal, fontWeight:600 }}>+ Add another image</div>
+                    : <>
+                        <div style={{ fontSize:14, fontWeight:600, color:T.white, marginBottom:6 }}>Upload photos of your working</div>
+                        <div style={{ fontSize:12, color:T.whiteDim, marginBottom:12 }}>You can select multiple images at once<br/>Clear, well-lit photos are easier to mark</div>
+                        <span className="btn-ghost" style={{ display:"inline-block", padding:"8px 18px", fontSize:13, pointerEvents:"none" }}>Choose Images →</span>
+                      </>
+                  }
+                </>
+              )}
+            </div>
+            {(imgPreviews[q.id] || []).filter(i => !i.error && !i.uploading).length > 0 && (
+              <div style={{ marginTop:6, fontSize:12, color:T.whiteDim }}>
+                {(imgPreviews[q.id] || []).filter(i => !i.error && !i.uploading).length} image{(imgPreviews[q.id] || []).filter(i => !i.error && !i.uploading).length > 1 ? "s" : ""} uploaded
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Navigation Footer */}
@@ -3480,7 +3726,7 @@ const FullScriptView = ({ submission, test, token, onBack }) => {
           const marksGiven = submission.question_marks?.[q.id];
 
           return (
-            <div key={q.id} className="glass" style={{ padding: 24, borderLeft: `3px solid ${isAuto ? (isCorrect ? T.success : T.danger) : T.whiteDim}` }}>
+            <div key={q.id} className="glass" style={{ padding: 24, borderLeft: `3px solid ${q.type === "image_upload" ? T.teal : isAuto ? (isCorrect ? T.success : T.danger) : T.whiteDim}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <span style={{ fontWeight: 700, fontSize: 14 }}>Q{i + 1}</span>
@@ -3494,13 +3740,16 @@ const FullScriptView = ({ submission, test, token, onBack }) => {
 
               {/* Student's answer */}
               <div style={{ padding: "10px 14px", background: "rgba(255,255,255,.04)", borderRadius: 8, marginBottom: 10 }}>
-                <div style={{ fontSize: 11, color: T.whiteDim, marginBottom: 4 }}>YOUR ANSWER</div>
-                <div style={{ fontSize: 14 }}>
-                  {q.type === "mcq" && studentAns !== undefined
-                    ? <RichContent content={(q.options || [])[Number(studentAns)] || "No answer"}/>
-                    : studentAns !== undefined ? String(studentAns) : <span style={{ color: T.whiteDim }}>No answer provided</span>
-                  }
-                </div>
+                <div style={{ fontSize: 11, color: T.whiteDim, marginBottom: 8 }}>YOUR ANSWER</div>
+                {q.type === "image_upload"
+                  ? <StudentImageGallery token={token} paths={studentAns}/>
+                  : <div style={{ fontSize: 14 }}>
+                      {q.type === "mcq" && studentAns !== undefined
+                        ? <RichContent content={(q.options || [])[Number(studentAns)] || "No answer"}/>
+                        : studentAns !== undefined ? String(studentAns) : <span style={{ color: T.whiteDim }}>No answer provided</span>
+                      }
+                    </div>
+                }
               </div>
 
               {/* Correct answer for auto-marked */}
@@ -3659,6 +3908,7 @@ const MarkingInterface = ({ test, token, showToast, onClose }) => {
               {(questions || []).map((q, i) => {
                 const ans     = selected.answers?.[q.id];
                 const isAuto  = q.type === "mcq" || q.type === "true_false";
+            const isManual = q.type === "long" || q.type === "short" || q.type === "image_upload";
                 const correct = isAuto && ans === q.correct_answer;
                 return (
                   <div key={q.id} className="glass" style={{ padding: 22 }}>
@@ -3668,13 +3918,16 @@ const MarkingInterface = ({ test, token, showToast, onClose }) => {
                     </div>
                     <div style={{ fontSize: 14, marginBottom: 12, lineHeight: 1.7 }}><RichContent content={q.content}/></div>
                     <div style={{ padding: "10px 14px", background: "rgba(255,255,255,.04)", borderRadius: 8, marginBottom: 10 }}>
-                      <div style={{ fontSize: 11, color: T.whiteDim, marginBottom: 4 }}>STUDENT'S ANSWER</div>
-                      <div style={{ fontSize: 14 }}>
-                        {q.type === "mcq" && ans !== undefined
-                          ? <RichContent content={(q.options || [])[Number(ans)] || "No answer"}/>
-                          : ans !== undefined ? String(ans) : <span style={{ color: T.whiteDim }}>No answer</span>
-                        }
-                      </div>
+                      <div style={{ fontSize: 11, color: T.whiteDim, marginBottom: 8 }}>STUDENT'S ANSWER</div>
+                      {q.type === "image_upload"
+                        ? <StudentImageGallery token={token} paths={ans}/>
+                        : <div style={{ fontSize: 14 }}>
+                            {q.type === "mcq" && ans !== undefined
+                              ? <RichContent content={(q.options || [])[Number(ans)] || "No answer"}/>
+                              : ans !== undefined ? String(ans) : <span style={{ color: T.whiteDim }}>No answer</span>
+                            }
+                          </div>
+                      }
                     </div>
                     {(q.type === "short" || q.type === "long") && q.correct_answer && (
                       <div style={{ padding: "10px 14px", background: "rgba(34,197,94,.06)", borderRadius: 8, marginBottom: 10, border: "1px solid rgba(34,197,94,.2)" }}>
@@ -3688,7 +3941,7 @@ const MarkingInterface = ({ test, token, showToast, onClose }) => {
                         <input type="number" min="0" max={q.marks || 1}
                           value={isAuto ? (correct ? q.marks || 1 : 0) : (qMarks[q.id] ?? "")}
                           readOnly={isAuto}
-                          onChange={e => !isAuto && setQMarks(p => ({ ...p, [q.id]: e.target.value }))}
+                          onChange={e => isManual && setQMarks(p => ({ ...p, [q.id]: e.target.value }))}
                           style={{ width: 64, textAlign: "center", opacity: isAuto ? .6 : 1 }}/>
                         <span style={{ fontSize: 13, color: T.whiteDim }}>/ {q.marks || 1}</span>
                       </div>
@@ -3792,6 +4045,7 @@ const TestPreview = ({ test, token, onClose }) => {
                 )}
                 {qs[currentQ].type === "short" && <input disabled placeholder="Student types answer here..." style={{ opacity: .6, cursor: "not-allowed" }}/>}
                 {qs[currentQ].type === "long"  && <textarea disabled rows={5} placeholder="Student writes answer here..." style={{ opacity: .6, cursor: "not-allowed" }}/>}
+                {qs[currentQ].type === "image_upload" && <div style={{ padding:"20px 14px", borderRadius:10, border:`2px dashed ${T.glassBorder}`, background:"rgba(255,255,255,.02)", textAlign:"center", color:T.whiteDim, fontSize:13, opacity:.7 }}>📸 Students upload photos of their working here</div>}
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
